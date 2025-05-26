@@ -448,8 +448,8 @@ const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNew
                     <span className={`font-medium text-sm sm:text-base ${isBookedSolid && !isPastDate ? 'text-rose-700' : !isPastDate ? 'text-green-700' : 'text-gray-400'} ${publicHoliday && !isPastDate ? 'text-purple-700 font-bold' : ''}`}>{day}</span>
                     
                     {!isPastDate && publicHoliday && (
-                    <div className="text-xs text-purple-600 truncate mt-0.5" title={publicHoliday.name}>
-                        {publicHoliday.name.substring(0,10)}{publicHoliday.name.length > 10 ? '...' : ''}
+                    <div className="text-xs text-purple-600 mt-0.5" title={publicHoliday.name}>
+                        {publicHoliday.name}
                     </div>
                     )}
 
@@ -484,10 +484,10 @@ const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNew
                 
                 {!isPastDate && schoolHoliday && (
                   <div 
-                    className={`absolute bottom-0 left-0 w-full h-7 flex items-center justify-center px-1 ${schoolHolidayBandColor} opacity-90`} 
+                    className={`absolute bottom-0 left-0 w-full h-auto flex items-start justify-center px-1 ${schoolHolidayBandColor} opacity-90`} 
                     title={schoolHoliday.name}
                   >
-                    <span className={`truncate text-xs ${schoolHolidayTextColor}`}>{schoolHoliday.name}</span>
+                    <span className={`text-xs ${schoolHolidayTextColor}`}>{schoolHoliday.name}</span>
                   </div>
                 )}
               </div>
