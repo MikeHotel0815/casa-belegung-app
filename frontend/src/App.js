@@ -53,7 +53,6 @@ const MOCK_INITIAL_BOOKINGS = [
 const parseDateString = (dateStr) => {
   if (!dateStr) return null;
   const parts = dateStr.split('-');
-  // Month is 0-indexed in JavaScript Date
   return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
 };
 
@@ -406,7 +405,7 @@ const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNew
                 baseCellStyle += isBookedSolid ? ' hover:bg-rose-100' : ' hover:bg-green-100';
             }
             if (isPastDate) {
-                baseCellStyle = 'bg-gray-100 text-gray-400 cursor-not-allowed'; // Paler background for past dates
+                baseCellStyle = 'bg-gray-100 text-gray-400 cursor-not-allowed'; 
             }
             
             let selectionStyle = '';
@@ -1155,9 +1154,38 @@ const AppContent = () => {
     });
   }, [bookings]); 
   
-  const handleBookingIndicatorClick = useCallback((bookingSegment) => { 
+  const handleOpenEditBookingModal = useCallback((bookingSegment) => { 
+    let overallStart = bookingSegment.startDate;
+    let overallEnd = bookingSegment.endDate;
+
+    if (bookingSegment.originalRequestId) {
+        const relatedSegments = bookings.filter(b => b.originalRequestId === bookingSegment.originalRequestId);
+        if (relatedSegments.length > 0) {
+            const startDates = relatedSegments.map(s => parseDateString(s.startDate)).filter(d => d);
+            const endDates = relatedSegments.map(s => parseDateString(s.endDate)).filter(d => d);
+             if (startDates.length > 0) {
+                overallStart = formatDateToYYYYMMDD(new Date(Math.min(...startDates.map(d => d.getTime()))));
+            }
+            if (endDates.length > 0) {
+                overallEnd = formatDateToYYYYMMDD(new Date(Math.max(...endDates.map(d => d.getTime()))));
+            }
+        }
+    }
+    
+    setSelectionStart(null); setSelectionEnd(null);
+    setBookingModalParams({ 
+      startDate: bookingSegment.startDate, 
+      endDate: bookingSegment.endDate,   
+      bookingToEdit: bookingSegment,
+      overallStartDate: overallStart,    
+      overallEndDate: overallEnd         
+    });
+    setIsBookingModalOpen(true);
+  }, [bookings, setSelectionStart, setSelectionEnd, setBookingModalParams, setIsBookingModalOpen]);
+
+  const handleBookingIndicatorClick = useCallback((bookingSegment) => {
     handleOpenEditBookingModal(bookingSegment);
-  }, [bookings]); // Added bookings as handleOpenEditBookingModal uses it
+  }, [handleOpenEditBookingModal]); 
 
   const handleCalendarDateClick = useCallback((dateStr) => {
     const clickedDateObj = parseDateString(dateStr);
@@ -1169,6 +1197,21 @@ const AppContent = () => {
         setSelectionStart(null); 
         setSelectionEnd(null);
         return; 
+    }
+    
+    const bookingsOnClickedDate = getBookingsOnDate(dateStr); // Usage of getBookingsOnDate
+    
+    if (bookingsOnClickedDate.length > 0) {
+        const userOwnedBooking = bookingsOnClickedDate.find(b => b.userId === currentUser?.id);
+        const adminCanEditAny = currentUser?.role === USER_ROLES.ADMIN ? bookingsOnClickedDate[0] : null;
+        const bookingToPotentiallyEdit = userOwnedBooking || adminCanEditAny;
+
+        if (bookingToPotentiallyEdit) { 
+            setSelectionStart(null); 
+            setSelectionEnd(null);
+            handleOpenEditBookingModal(bookingToPotentiallyEdit); 
+            return; 
+        }
     }
     
     if (!selectionStart) {
@@ -1195,7 +1238,7 @@ const AppContent = () => {
         });
         setIsBookingModalOpen(true);
     }
-  }, [selectionStart, setSelectionStart, setSelectionEnd, setBookingModalParams, setIsBookingModalOpen]);
+  }, [currentUser, getBookingsOnDate, selectionStart, handleOpenEditBookingModal, setSelectionStart, setSelectionEnd, setBookingModalParams, setIsBookingModalOpen]);
 
   const handleOpenNewBookingModal = useCallback((booking = null) => { 
     const isEditing = !!booking;
@@ -1228,34 +1271,6 @@ const AppContent = () => {
     setIsBookingModalOpen(true);
   }, [bookings, setSelectionStart, setSelectionEnd, setBookingModalParams, setIsBookingModalOpen]);
 
-  const handleOpenEditBookingModal = useCallback((bookingSegment) => { 
-    let overallStart = bookingSegment.startDate;
-    let overallEnd = bookingSegment.endDate;
-
-    if (bookingSegment.originalRequestId) {
-        const relatedSegments = bookings.filter(b => b.originalRequestId === bookingSegment.originalRequestId);
-        if (relatedSegments.length > 0) {
-            const startDates = relatedSegments.map(s => parseDateString(s.startDate)).filter(d => d);
-            const endDates = relatedSegments.map(s => parseDateString(s.endDate)).filter(d => d);
-             if (startDates.length > 0) {
-                overallStart = formatDateToYYYYMMDD(new Date(Math.min(...startDates.map(d => d.getTime()))));
-            }
-            if (endDates.length > 0) {
-                overallEnd = formatDateToYYYYMMDD(new Date(Math.max(...endDates.map(d => d.getTime()))));
-            }
-        }
-    }
-    
-    setSelectionStart(null); setSelectionEnd(null);
-    setBookingModalParams({ 
-      startDate: bookingSegment.startDate, 
-      endDate: bookingSegment.endDate,   
-      bookingToEdit: bookingSegment,
-      overallStartDate: overallStart,    
-      overallEndDate: overallEnd         
-    });
-    setIsBookingModalOpen(true);
-  }, [bookings, setSelectionStart, setSelectionEnd, setBookingModalParams, setIsBookingModalOpen]);
 
   const closeBookingModal = useCallback(() => {
     setIsBookingModalOpen(false); setSelectionStart(null); setSelectionEnd(null);
