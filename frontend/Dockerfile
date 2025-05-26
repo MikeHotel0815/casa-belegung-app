@@ -44,7 +44,7 @@ FROM nginx:stable-alpine
 # Kopiere die gebauten statischen Dateien aus dem 'builder'-Stage
 # Der Pfad '/app/dist' ist der übliche Ausgabeordner für Vue-CLI-Projekte.
 # Überprüfen Sie dies ggf. in Ihrer vue.config.js oder dem Build-Output.
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/build /usr/share/nginx/html
 
 # Port, auf dem Nginx lauscht (Standard ist 80)
 EXPOSE 80
