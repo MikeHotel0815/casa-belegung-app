@@ -1,9 +1,5 @@
-import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, CalendarDays, UserCircle, LogIn, LogOut, PlusCircle, Edit3, Trash2, ShieldCheck, Home, Users } from 'lucide-react';
-
-// Tailwind CSS (wird normalerweise über eine CSS-Datei oder einen Build-Prozess eingebunden)
-// Für dieses Beispiel gehen wir davon aus, dass Tailwind global verfügbar ist.
-// <script src="https://cdn.tailwindcss.com"></script>
+import React, { useState, useEffect, createContext, useContext, useMemo, useCallback } from 'react'; 
+import { ChevronLeft, ChevronRight, CalendarDays, UserCircle, LogIn, LogOut, PlusCircle, Edit3, Trash2, ShieldCheck, Home, Users, Mail, Phone, KeyRound, BarChart3 } from 'lucide-react';
 
 // Constants
 const USER_ROLES = {
@@ -15,344 +11,474 @@ const USER_ROLES = {
 const BOOKING_STATUS = {
   RESERVED: 'reserved',
   CONFIRMED: 'confirmed',
+  ANFRAGE: 'anfrage', 
 };
 
+// Holiday Data for Hessen 2025
+const HESSEN_HOLIDAYS_2025 = {
+  public: [
+    { date: "2025-01-01", name: "Neujahr" },
+    { date: "2025-04-18", name: "Karfreitag" },
+    { date: "2025-04-21", name: "Ostermontag" },
+    { date: "2025-05-01", name: "Tag der Arbeit" },
+    { date: "2025-05-29", name: "Christi Himmelfahrt" },
+    { date: "2025-06-09", name: "Pfingstmontag" },
+    { date: "2025-06-19", name: "Fronleichnam" },
+    { date: "2025-10-03", name: "Tag der Deutschen Einheit" },
+    { date: "2025-12-25", name: "1. Weihnachtstag" },
+    { date: "2025-12-26", name: "2. Weihnachtstag" },
+  ],
+  school: [ 
+    { startDate: "2025-04-07", endDate: "2025-04-21", name: "Osterferien" },
+    { startDate: "2025-07-07", endDate: "2025-08-15", name: "Sommerferien" },
+    { startDate: "2025-10-06", endDate: "2025-10-18", name: "Herbstferien" },
+    { startDate: "2025-12-22", endDate: "2026-01-10", name: "Weihnachtsferien" }, 
+  ]
+};
+
+
 // Mock Data
-const MOCK_USERS = [
-  { id: 'user1', name: 'Max Mustermann', email: 'max@example.com', role: USER_ROLES.USER, password: 'password123' },
-  { id: 'admin1', name: 'Admina Administrator', email: 'admin@example.com', role: USER_ROLES.ADMIN, password: 'adminpassword' },
-  { id: 'user2', name: 'Erika Musterfrau', email: 'erika@example.com', role: USER_ROLES.USER, password: 'password456' },
+const MOCK_USERS_INITIAL = [ 
+  { id: 'user1', name: 'Max Mustermann', email: 'max@example.com', password: 'password123', role: USER_ROLES.USER, phone: '01701234567' },
+  { id: 'user2', name: 'Erika Musterfrau', email: 'erika@example.com', password: 'password123', role: USER_ROLES.USER, phone: '01701234568' },
+  { id: 'user3', name: 'Erwin Mustermann', email: 'erwin@example.com', password: 'password123', role: USER_ROLES.USER, phone: '01701234569' },
+  { id: 'admin1', name: 'Admina Administrator', email: 'admin@example.com', password: 'adminpassword', role: USER_ROLES.ADMIN, phone: '01609876543' },
+
 ];
 
 const MOCK_INITIAL_BOOKINGS = [
   { id: 'booking1', userId: 'user1', userName: 'Max Mustermann', startDate: '2025-07-10', endDate: '2025-07-15', status: BOOKING_STATUS.CONFIRMED, propertyId: 'ferienhaus1' },
-  { id: 'booking2', userId: 'user2', userName: 'Erika Musterfrau', startDate: '2025-07-20', endDate: '2025-07-25', status: BOOKING_STATUS.RESERVED, propertyId: 'ferienhaus1' },
-  { id: 'booking3', userId: 'admin1', userName: 'Admina Administrator (für Gast)', startDate: '2025-08-01', endDate: '2025-08-05', status: BOOKING_STATUS.CONFIRMED, propertyId: 'ferienhaus1' },
 ];
+
+// Helper: Parse YYYY-MM-DD string to local Date object (midnight)
+const parseDateString = (dateStr) => {
+  if (!dateStr) return null;
+  const parts = dateStr.split('-');
+  return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
+};
+
+// Helper: Format Date object to YYYY-MM-DD string (local)
+const formatDateToYYYYMMDD = (date) => {
+  if (!date) return '';
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 
 // Context for Authentication
 const AuthContext = createContext(null);
-
 const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null); // { id, name, email, role }
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState(MOCK_USERS_INITIAL); 
 
-  // Simulate initial auth check (e.g., from a token)
-  useEffect(() => {
-    // In a real app, you'd check localStorage or a cookie for a token
-    // For now, start logged out
-    setLoading(false);
+  useEffect(() => { 
+    setTimeout(() => { 
+        setLoading(false); 
+    }, 200); 
   }, []);
-
-  const login = async (email, password) => {
-    // Simulate API call
+  
+  const login = useCallback(async (email, password) => { 
+    setLoading(true); 
     return new Promise((resolve, reject) => {
       setTimeout(() => {
-        const user = MOCK_USERS.find(u => u.email === email && u.password === password);
-        if (user) {
-          setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role });
-          resolve(user);
-        } else {
-          reject(new Error('Ungültige Anmeldedaten.'));
+        const user = users.find(u => u.email === email && u.password === password); 
+        if (user) { 
+          setCurrentUser({ id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone }); 
+          resolve(user); 
+        } else { 
+          reject(new Error('Ungültige Anmeldedaten.')); 
         }
+        setLoading(false);
       }, 500);
     });
-  };
+  }, [users]); 
 
-  const logout = () => {
-    setCurrentUser(null);
-    // In a real app, you'd clear the token
-  };
+  const logout = useCallback(() => { 
+    setCurrentUser(null); 
+  }, []); 
+  
+  const addUser = useCallback((newUser) => { 
+    const userWithId = { ...newUser, id: `user${Date.now()}` };
+    setUsers(prevUsers => [...prevUsers, userWithId]);
+    return userWithId;
+  }, []);
 
-  const authContextValue = useMemo(() => ({ currentUser, login, logout, loading }), [currentUser, loading]);
+  const updateUser = useCallback((userId, updatedData) => { 
+    setUsers(prevUsers => prevUsers.map(user => user.id === userId ? { ...user, ...updatedData } : user));
+    if (currentUser && currentUser.id === userId) {
+      setCurrentUser(prev => ({ ...prev, ...updatedData }));
+    }
+  }, [currentUser]); 
+
+  const deleteUser = useCallback((userId) => { 
+    setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
+    if (currentUser && currentUser.id === userId) {
+        logout(); 
+    }
+  }, [currentUser, logout]); 
 
 
-  if (loading) {
-    return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>;
-  }
+  const authContextValue = useMemo(() => ({ 
+    currentUser, 
+    login, 
+    logout, 
+    loading, 
+    users, 
+    addUser, 
+    updateUser, 
+    deleteUser 
+  }), [currentUser, loading, users, login, logout, addUser, updateUser, deleteUser]);
 
-  return (
-    <AuthContext.Provider value={authContextValue}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return (<AuthContext.Provider value={authContextValue}>{children}</AuthContext.Provider>);
 };
-
 const useAuth = () => useContext(AuthContext);
 
 // Context for Bookings
 const BookingContext = createContext(null);
-
 const BookingProvider = ({ children }) => {
   const [bookings, setBookings] = useState(MOCK_INITIAL_BOOKINGS);
-  const { currentUser } = useAuth();
 
-  // Simulate fetching bookings (would depend on current month/view in real app)
-  // useEffect(() => {
-  //   // API_fetchBookings().then(setBookings);
-  // }, []);
-
-  const addBooking = async (bookingDetails) => {
-    // Simulate API call
+  const addBooking = useCallback(async (bookingDetails) => {
     return new Promise((resolve) => {
-      setTimeout(() => {
-        const newBooking = {
-          ...bookingDetails,
-          id: `booking${Date.now()}`,
-          propertyId: 'ferienhaus1', // Assuming one property for now
-        };
-        setBookings(prev => [...prev, newBooking]);
-        resolve(newBooking);
-      }, 500);
+        setTimeout(() => {
+            const { startDate: reqStartStr, endDate: reqEndStr, userId, userName, status: initialRequestedStatus } = bookingDetails;
+            const reqStartDate = parseDateString(reqStartStr);
+            const reqEndDate = parseDateString(reqEndStr);
+
+            if (!reqStartDate || !reqEndDate || reqEndDate < reqStartDate) {
+                console.error("Invalid date range for new booking.");
+                resolve([]); 
+                return;
+            }
+            
+            const requestedStatus = initialRequestedStatus || BOOKING_STATUS.RESERVED;
+            const newBookingSegmentsData = [];
+            let currentSegmentStartDate = null;
+            let currentSegmentStatus = null;
+
+            for (let dayIter = new Date(reqStartDate); dayIter <= reqEndDate; dayIter.setDate(dayIter.getDate() + 1)) {
+                const currentDay = new Date(dayIter); 
+                currentDay.setHours(0,0,0,0);
+                let dayStatusForNewBooking = requestedStatus;
+
+                const existingBookingsOnThisDay = bookings.filter(b => {
+                    if (b.status === BOOKING_STATUS.ANFRAGE && b.userId === userId) return false; 
+                    if (b.status === BOOKING_STATUS.ANFRAGE) return false; 
+                    
+                    const existingStart = parseDateString(b.startDate);
+                    const existingEnd = parseDateString(b.endDate);
+                    return currentDay >= existingStart && currentDay <= existingEnd;
+                });
+
+                if (existingBookingsOnThisDay.length > 0) {
+                    dayStatusForNewBooking = BOOKING_STATUS.ANFRAGE;
+                }
+
+                if (currentSegmentStartDate === null) { 
+                    currentSegmentStartDate = new Date(currentDay);
+                    currentSegmentStatus = dayStatusForNewBooking;
+                } else if (dayStatusForNewBooking !== currentSegmentStatus) { 
+                    newBookingSegmentsData.push({
+                        startDate: formatDateToYYYYMMDD(currentSegmentStartDate),
+                        endDate: formatDateToYYYYMMDD(new Date(currentDay.getTime() - 86400000)), 
+                        status: currentSegmentStatus,
+                        userId, userName, propertyId: 'ferienhaus1',
+                    });
+                    currentSegmentStartDate = new Date(currentDay); 
+                    currentSegmentStatus = dayStatusForNewBooking;
+                }
+            }
+            
+            if (currentSegmentStartDate !== null) {
+                newBookingSegmentsData.push({
+                    startDate: formatDateToYYYYMMDD(currentSegmentStartDate),
+                    endDate: formatDateToYYYYMMDD(reqEndDate), 
+                    status: currentSegmentStatus,
+                    userId, userName, propertyId: 'ferienhaus1',
+                });
+            }
+            
+            const newBookingsToAdd = newBookingSegmentsData.map(segment => ({
+                ...segment,
+                id: `booking${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 
+            }));
+
+            setBookings(prev => [...prev, ...newBookingsToAdd]);
+            resolve(newBookingsToAdd);
+        }, 500);
     });
-  };
+  }, [bookings]); 
 
-  const updateBooking = async (bookingId, updates) => {
-     // Simulate API call
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, ...updates } : b));
-        resolve(true);
-      }, 500);
-    });
-  };
+  const updateBookingContext = useCallback(async (bookingId, updates) => new Promise(resolve => setTimeout(() => {
+    setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, ...updates } : b)); resolve(true);
+  }, 500)), []); 
 
-  const deleteBooking = async (bookingId) => {
-    // Simulate API call
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        setBookings(prev => prev.filter(b => b.id !== bookingId));
-        resolve(true);
-      }, 500);
-    });
-  };
-  
-  const bookingContextValue = useMemo(() => ({ bookings, addBooking, updateBooking, deleteBooking, setBookings }), [bookings]);
+  const deleteBookingFromContext = useCallback(async (bookingId) => new Promise(resolve => setTimeout(() => { 
+    setBookings(prev => prev.filter(b => b.id !== bookingId)); resolve(true);
+  }, 500)), []); 
 
+  const bookingContextValue = useMemo(() => ({ 
+    bookings, 
+    addBooking, 
+    updateBooking: updateBookingContext, 
+    deleteBooking: deleteBookingFromContext, 
+    setBookings 
+  }), [bookings, addBooking, updateBookingContext, deleteBookingFromContext]); 
 
-  return (
-    <BookingContext.Provider value={bookingContextValue}>
-      {children}
-    </BookingContext.Provider>
-  );
+  return (<BookingContext.Provider value={bookingContextValue}>{children}</BookingContext.Provider>);
 };
-
 const useBookings = () => useContext(BookingContext);
 
 // Helper Functions
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay(); // 0 (Sun) - 6 (Sat)
-const formatDate = (date) => date.toISOString().split('T')[0]; // YYYY-MM-DD
+const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+const isLeapYear = (year) => (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+
 
 // Components
+const LoadingSpinner = () => (<div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>);
 
 const Navbar = ({ setCurrentView }) => {
-  const { currentUser, logout } = useAuth();
-
+  const { currentUser, logout: authLogout } = useAuth();
+  const handleLogout = () => { authLogout(); setCurrentView('login'); };
   return (
     <nav className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-50">
       <div className="container mx-auto flex justify-between items-center">
-        <div className="flex items-center space-x-2">
-            <Home size={28} />
-            <h1 className="text-xl font-bold">Ferienhaus Planer</h1>
+        <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setCurrentView(currentUser ? 'calendar' : 'login')}>
+            <Home size={28} /><h1 className="text-xl font-bold">Ferienhaus Planer</h1>
         </div>
-        <div className="space-x-4 flex items-center">
+        <div className="space-x-2 sm:space-x-4 flex items-center">
           {currentUser && (
             <>
-              <button onClick={() => setCurrentView('calendar')} className="hover:bg-blue-700 px-3 py-2 rounded-md flex items-center space-x-1">
-                <CalendarDays size={20}/> <span>Kalender</span>
-              </button>
-              {currentUser.role === USER_ROLES.ADMIN && (
-                <button onClick={() => setCurrentView('admin')} className="hover:bg-blue-700 px-3 py-2 rounded-md flex items-center space-x-1">
-                  <ShieldCheck size={20}/> <span>Admin</span>
-                </button>
-              )}
-               <button onClick={() => setCurrentView('userManagement')} className="hover:bg-blue-700 px-3 py-2 rounded-md flex items-center space-x-1">
-                  <Users size={20}/> <span>Benutzer</span>
-                </button>
+              <button onClick={() => setCurrentView('calendar')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><CalendarDays size={20}/> <span>Kalender</span></button>
+              <button onClick={() => setCurrentView('statistics')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><BarChart3 size={20}/> <span>Statistik</span></button>
+              {currentUser.role === USER_ROLES.ADMIN && (<button onClick={() => setCurrentView('admin')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><ShieldCheck size={20}/> <span>Admin</span></button>)}
+              <button onClick={() => setCurrentView('userManagement')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><Users size={20}/> <span className="hidden sm:inline">Benutzer</span></button>
             </>
           )}
           {currentUser ? (
             <>
-              <span className="text-sm hidden sm:inline">Hallo, {currentUser.name}!</span>
-              <button onClick={() => { logout(); setCurrentView('login'); }} className="bg-red-500 hover:bg-red-600 px-3 py-2 rounded-md flex items-center space-x-1">
-                <LogOut size={20}/> <span className="hidden sm:inline">Logout</span>
-              </button>
+              <span className="text-sm hidden md:inline">Salve, {currentUser.name.split(' ')[0]}!</span>
+              <button onClick={handleLogout} className="bg-red-500 hover:bg-red-600 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><LogOut size={20}/> <span className="hidden sm:inline">Logout</span></button>
             </>
-          ) : (
-            <button onClick={() => setCurrentView('login')} className="bg-green-500 hover:bg-green-600 px-3 py-2 rounded-md flex items-center space-x-1">
-              <LogIn size={20}/> <span>Login</span>
-            </button>
-          )}
+          ) : (<button onClick={() => setCurrentView('login')} className="bg-green-500 hover:bg-green-600 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><LogIn size={20}/> <span>Login</span></button>)}
         </div>
       </div>
     </nav>
   );
 };
 
-const LoginPage = ({ setCurrentView }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+const LoginPage = () => {
+  const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
+  const [error, setError] = useState(''); const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
-
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-    try {
-      await login(email, password);
-      setCurrentView('calendar'); // Navigate to calendar on successful login
-    } catch (err) {
-      setError(err.message || 'Login fehlgeschlagen.');
-    } finally {
-      setIsLoading(false);
-    }
+    e.preventDefault(); setError(''); setIsLoading(true);
+    try { await login(email, password); } 
+    catch (err) { setError(err.message || 'Login fehlgeschlagen.'); } 
+    finally { setIsLoading(false); }
   };
-
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-100px)] bg-gray-100 p-4">
-      <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
-        <div className="flex justify-center mb-6">
-          <UserCircle size={64} className="text-blue-500" />
-        </div>
+      <div className="bg-white p-6 sm:p-8 rounded-lg shadow-xl w-full max-w-md">
+        <div className="flex justify-center mb-6"><UserCircle size={64} className="text-blue-500" /></div>
         <h2 className="text-2xl font-bold text-center mb-6 text-gray-700">Login</h2>
         {error && <p className="bg-red-100 text-red-700 p-3 rounded-md mb-4 text-sm">{error}</p>}
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-600">Email</label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="ihre@email.de"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-600">Passwort</label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Ihr Passwort"
-            />
-          </div>
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
-            >
-              {isLoading ? 'Anmelden...' : 'Anmelden'}
-            </button>
-          </div>
+          <div><label htmlFor="email" className="block text-sm font-medium text-gray-600">Email</label><input type="email" id="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="ihre@email.de"/></div>
+          <div><label htmlFor="password" className="block text-sm font-medium text-gray-600">Passwort</label><input type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Ihr Passwort"/></div>
+          <div><button type="submit" disabled={isLoading} className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">{isLoading ? 'Anmelden...' : 'Anmelden'}</button></div>
         </form>
       </div>
-       <div className="mt-6 text-sm text-gray-600 bg-white p-4 rounded-lg shadow-md">
-          <p className="font-semibold">Test-Anmeldedaten:</p>
-          <ul className="list-disc list-inside mt-1">
-            <li>Benutzer: <code className="bg-gray-200 px-1 rounded">max@example.com</code> / <code className="bg-gray-200 px-1 rounded">password123</code></li>
-            <li>Admin: <code className="bg-gray-200 px-1 rounded">admin@example.com</code> / <code className="bg-gray-200 px-1 rounded">adminpassword</code></li>
-          </ul>
-        </div>
+      <div className="mt-6 text-sm text-gray-600 bg-white p-4 rounded-lg shadow-md w-full max-w-md">
+        <p className="font-semibold">Test-Anmeldedaten:</p>
+        <ul className="list-disc list-inside mt-1">
+          <li>Benutzer: <code className="bg-gray-200 text-gray-800 px-1 rounded">max@example.com</code> / <code className="bg-gray-200 text-gray-800 px-1 rounded">password123</code></li>
+          <li>Admin: <code className="bg-gray-200 text-gray-800 px-1 rounded">admin@example.com</code> / <code className="bg-gray-200 text-gray-800 px-1 rounded">adminpassword</code></li>
+        </ul>
+      </div>
     </div>
   );
 };
 
-const CalendarView = ({ setCurrentView, openBookingModal }) => {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const { bookings } = useBookings();
-  const { currentUser } = useAuth();
+const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNewBookingModal }) => {
+  const [currentDisplayDate, setCurrentDisplayDate] = useState(new Date()); 
+  const { bookings } = useBookings(); 
+  const { currentUser, loading: authLoading } = useAuth(); 
 
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth(); // 0-11
+  const year = currentDisplayDate.getFullYear();
+  const month = currentDisplayDate.getMonth(); 
 
-  const daysInMonth = getDaysInMonth(year, month);
+  const daysInMonthCount = getDaysInMonth(year, month);
   let firstDayPos = getFirstDayOfMonth(year, month);
-  firstDayPos = firstDayPos === 0 ? 6 : firstDayPos -1; // Adjust: 0 (Mon) - 6 (Sun)
+  firstDayPos = firstDayPos === 0 ? 6 : firstDayPos -1; 
 
-  const monthDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const monthDays = Array.from({ length: daysInMonthCount }, (_, i) => i + 1);
   const leadingEmptyDays = Array.from({ length: firstDayPos });
 
-  const handlePrevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-  const handleNextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const handlePrevMonth = () => { setCurrentDisplayDate(new Date(year, month - 1, 1)); };
+  const handleNextMonth = () => { setCurrentDisplayDate(new Date(year, month + 1, 1)); };
 
-  const getBookingsForDate = (day) => {
-    const dateStr = formatDate(new Date(year, month, day));
-    return bookings.filter(b => {
-      const startDate = new Date(b.startDate);
-      const endDate = new Date(b.endDate);
-      const currentDateIter = new Date(dateStr);
-      return currentDateIter >= startDate && currentDateIter <= endDate;
+  const getBookingsForCellDisplay = (dateStr) => bookings.filter(b => {
+    const current = parseDateString(dateStr);
+    const bookingStart = parseDateString(b.startDate);
+    const bookingEnd = parseDateString(b.endDate);
+    if (!current || !bookingStart || !bookingEnd) return false;
+    return current >= bookingStart && current <= bookingEnd;
+  }).sort((a,b) => { 
+    if (a.status === BOOKING_STATUS.ANFRAGE && b.status !== BOOKING_STATUS.ANFRAGE) return 1;
+    if (a.status !== BOOKING_STATUS.ANFRAGE && b.status === BOOKING_STATUS.ANFRAGE) return -1;
+    return 0;
+  });
+
+  const getPublicHoliday = (dateStr) => {
+    if (parseDateString(dateStr)?.getFullYear() !== 2025) return null;
+    return HESSEN_HOLIDAYS_2025.public.find(h => h.date === dateStr);
+  };
+
+  const getSchoolHoliday = (dateStr) => {
+    const currentDate = parseDateString(dateStr);
+    if (!currentDate) return null;
+    return HESSEN_HOLIDAYS_2025.school.find(h => {
+        const start = parseDateString(h.startDate);
+        const end = parseDateString(h.endDate);
+        if (!start || !end) return false;
+        const adjustedEnd = (h.name === "Weihnachtsferien" && end.getFullYear() > year) ? new Date(year, 11, 31) : end;
+        const adjustedStart = (h.name === "Weihnachtsferien" && start.getFullYear() < year) ? new Date(year, 0, 1) : start;
+        return currentDate >= adjustedStart && currentDate <= adjustedEnd;
     });
   };
 
-  if (!currentUser) {
-     setCurrentView('login');
-     return null;
-  }
+
+  if (authLoading) return <LoadingSpinner />; 
+  if (!currentUser) return null; 
+
+  const today = new Date();
+  today.setHours(0,0,0,0); 
 
   return (
     <div className="container mx-auto p-4">
       <div className="bg-white p-6 rounded-lg shadow-xl">
         <div className="flex justify-between items-center mb-6">
-          <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-gray-200">
-            <ChevronLeft size={28} className="text-blue-500" />
-          </button>
-          <h2 className="text-2xl font-bold text-blue-600">
-            {currentDate.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}
-          </h2>
-          <button onClick={handleNextMonth} className="p-2 rounded-full hover:bg-gray-200">
-            <ChevronRight size={28} className="text-blue-500" />
-          </button>
+          <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-gray-200"><ChevronLeft size={28} className="text-blue-500" /></button>
+          <h2 className="text-2xl font-bold text-blue-600">{currentDisplayDate.toLocaleString('de-DE', { month: 'long', year: 'numeric' })}</h2>
+          <button onClick={handleNextMonth} className="p-2 rounded-full hover:bg-gray-200"><ChevronRight size={28} className="text-blue-500" /></button>
         </div>
-
         <div className="grid grid-cols-7 gap-1 text-center font-semibold text-gray-600 mb-2">
-          {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(day => (
-            <div key={day} className="py-2">{day}</div>
-          ))}
+          {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(day => (<div key={day} className="py-2 text-xs sm:text-base">{day}</div>))}
         </div>
-
         <div className="grid grid-cols-7 gap-1">
-          {leadingEmptyDays.map((_, index) => (
-            <div key={`empty-${index}`} className="border rounded-md h-24 sm:h-32"></div>
-          ))}
+          {leadingEmptyDays.map((_, index) => (<div key={`empty-${index}`} className="border rounded-md min-h-[8rem] sm:min-h-[9rem] md:min-h-[10rem]"></div>))}
           {monthDays.map(day => {
-            const dayBookings = getBookingsForDate(day);
-            const isBooked = dayBookings.length > 0;
-            const fullDate = new Date(year, month, day);
+            const dayDateObj = new Date(year, month, day);
+            dayDateObj.setHours(0,0,0,0); 
+            const dayDateStr = formatDateToYYYYMMDD(dayDateObj);
+            const dayBookings = getBookingsForCellDisplay(dayDateStr); 
+            const isBookedSolid = dayBookings.some(b => b.status === BOOKING_STATUS.CONFIRMED || b.status === BOOKING_STATUS.RESERVED);
+            const publicHoliday = getPublicHoliday(dayDateStr);
+            const schoolHoliday = getSchoolHoliday(dayDateStr);
+            const isPastDate = dayDateObj < today;
+            
+            let baseCellStyle = isBookedSolid ? 'bg-rose-50' : 'bg-green-50'; 
+            if (!isPastDate) { 
+                baseCellStyle += isBookedSolid ? ' hover:bg-rose-100' : ' hover:bg-green-100';
+            }
+            if (isPastDate) {
+                baseCellStyle = 'bg-gray-50 text-gray-300 cursor-not-allowed'; 
+            }
+            
+            let selectionStyle = '';
+            const selectionStartDateObj = parseDateString(selectionStart);
+            const selectionEndDateObj = parseDateString(selectionEnd);
+
+            if (!isPastDate) { 
+                if (selectionStartDateObj && dayDateObj.getTime() === selectionStartDateObj.getTime()) {
+                selectionStyle = 'bg-blue-200 ring-2 ring-blue-500 hover:bg-blue-300'; 
+                } else if (selectionEndDateObj && dayDateObj.getTime() === selectionEndDateObj.getTime()) {
+                selectionStyle = 'bg-blue-200 ring-2 ring-blue-500 hover:bg-blue-300';
+                } else if (selectionStartDateObj && selectionEndDateObj && dayDateObj > selectionStartDateObj && dayDateObj < selectionEndDateObj) {
+                selectionStyle = 'bg-blue-100 hover:bg-blue-200';
+                } else if (selectionStartDateObj && !selectionEndDateObj && dayDateObj.getTime() === selectionStartDateObj.getTime()) {
+                selectionStyle = 'bg-blue-200 ring-2 ring-blue-500 hover:bg-blue-300';
+                }
+            }
+            
+            const finalCellStyle = selectionStyle || baseCellStyle;
+
+            let tooltipText = '';
+            if (publicHoliday) tooltipText += publicHoliday.name;
+            if (schoolHoliday) tooltipText += (tooltipText ? ' / ' : '') + schoolHoliday.name;
+            dayBookings.forEach(b => {tooltipText += (tooltipText ? ' | ' : '') + `${b.userName} (${b.status})`});
+            if (isPastDate) tooltipText = "Vergangenes Datum";
+
+
+            const schoolHolidayBandColor = schoolHoliday ? 'bg-gray-200' : ''; 
+            const schoolHolidayTextColor = schoolHoliday ? 'text-gray-600' : '';
+
 
             return (
               <div
                 key={day}
-                className={`border rounded-md p-2 h-24 sm:h-32 flex flex-col cursor-pointer hover:bg-blue-50 transition-colors duration-150
-                  ${isBooked ? 'bg-rose-100' : 'bg-green-50'}`}
-                onClick={() => openBookingModal(formatDate(fullDate))}
+                className={`relative border rounded-md min-h-[8rem] sm:min-h-[9rem] md:min-h-[10rem] p-1 sm:p-2 flex flex-col ${isPastDate ? 'cursor-not-allowed' : 'cursor-pointer'} transition-colors duration-150 ${finalCellStyle} overflow-hidden`}
+                onClick={() => onDateClick(dayDateStr)} 
+                title={tooltipText || dayDateStr} 
               >
-                <span className={`font-medium ${isBooked ? 'text-rose-700' : 'text-green-700'}`}>{day}</span>
-                {dayBookings.map(booking => (
-                  <div key={booking.id} className={`mt-1 text-xs p-1 rounded-md truncate ${booking.status === BOOKING_STATUS.CONFIRMED ? 'bg-rose-500 text-white' : 'bg-yellow-400 text-black'}`}>
-                    {booking.userName.split(' ')[0]} ({booking.status === BOOKING_STATUS.CONFIRMED ? 'Bestätigt' : 'Reserviert'})
+                <div className="flex-grow"> 
+                    <span className={`font-medium text-sm sm:text-base ${isBookedSolid && !isPastDate ? 'text-rose-700' : !isPastDate ? 'text-green-700' : 'text-gray-300'} ${publicHoliday && !isPastDate ? 'text-purple-700 font-bold' : ''}`}>{day}</span>
+                    
+                    {!isPastDate && publicHoliday && (
+                    <div className="text-xs text-purple-600 truncate mt-0.5" title={publicHoliday.name}>
+                        {publicHoliday.name.substring(0,10)}{publicHoliday.name.length > 10 ? '...' : ''}
+                    </div>
+                    )}
+
+                    {!isPastDate && <div className="mt-1 space-y-0.5"> 
+                        {dayBookings.map(booking => {
+                            let bookingStyle = '';
+                            let statusIndicator = '';
+                            switch(booking.status) {
+                                case BOOKING_STATUS.CONFIRMED: 
+                                    bookingStyle = 'bg-rose-600 text-white'; statusIndicator = 'B'; break;
+                                case BOOKING_STATUS.RESERVED: 
+                                    bookingStyle = 'bg-yellow-500 text-black'; statusIndicator = 'R'; break;
+                                case BOOKING_STATUS.ANFRAGE: 
+                                    bookingStyle = 'bg-orange-400 text-orange-800'; statusIndicator = 'A'; break;
+                                default: bookingStyle = 'bg-gray-400 text-white';
+                            }
+                            return (
+                                <div key={booking.id} className={`text-xs p-0.5 sm:p-1 rounded-sm truncate ${bookingStyle}`}>
+                                    {booking.userName.split(' ')[0]} ({statusIndicator})
+                                </div>
+                            );
+                        })}
+                    </div>}
+                </div>
+                
+                {!isPastDate && schoolHoliday && (
+                  <div 
+                    className={`absolute bottom-0 left-0 w-full h-7 flex items-center justify-center px-1 ${schoolHolidayBandColor} opacity-90`} 
+                    title={schoolHoliday.name}
+                  >
+                    <span className={`truncate text-xs ${schoolHolidayTextColor}`}>{schoolHoliday.name}</span>
                   </div>
-                ))}
+                )}
               </div>
             );
           })}
         </div>
-        <div className="mt-6 flex justify-end">
-            <button
-                onClick={() => openBookingModal(null)}
-                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md flex items-center space-x-2"
+        <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div className="text-sm">
+                {selectionStart && !selectionEnd && <p className="text-blue-600">Startdatum: <strong>{selectionStart}</strong>. Bitte Enddatum auswählen.</p>}
+                {selectionStart && selectionEnd && <p className="text-green-600">Ausgewählter Zeitraum: <strong>{selectionStart}</strong> bis <strong>{selectionEnd}</strong></p>}
+            </div>
+            <button 
+                onClick={handleOpenNewBookingModal} 
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center space-x-2 w-full sm:w-auto"
             >
-                <PlusCircle size={20} />
-                <span>Neue Buchung</span>
+                <PlusCircle size={20} /><span>Buchung ohne Vorauswahl</span>
             </button>
         </div>
       </div>
@@ -360,200 +486,183 @@ const CalendarView = ({ setCurrentView, openBookingModal }) => {
   );
 };
 
-const BookingModal = ({ isOpen, onClose, selectedDate, bookingToEdit }) => {
-  const { currentUser } = useAuth();
-  const { addBooking, updateBooking, bookings } = useBookings();
+const BookingModal = ({ isOpen, onClose, initialStartDate, initialEndDate, bookingToEdit, onDeleteBooking }) => { 
+  const { currentUser, users: allUsers } = useAuth(); 
+  const { addBooking, updateBooking, bookings } = useBookings(); // Correctly destructure bookings
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [userIdForBooking, setUserIdForBooking] = useState(''); // For admin
-  const [userNameForBooking, setUserNameForBooking] = useState(''); // For admin display
-  const [status, setStatus] = useState(BOOKING_STATUS.RESERVED);
+  const [userIdForBooking, setUserIdForBooking] = useState('');
+  const [status, setStatus] = useState(BOOKING_STATUS.RESERVED); 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [availableUsers, setAvailableUsers] = useState(MOCK_USERS.filter(u => u.role === USER_ROLES.USER));
+  
+  const availableUsersForBooking = useMemo(() => allUsers.filter(u => u.role === USER_ROLES.USER), [allUsers]);
 
 
   useEffect(() => {
     if (bookingToEdit) {
       setStartDate(bookingToEdit.startDate);
       setEndDate(bookingToEdit.endDate);
-      setStatus(bookingToEdit.status);
-      if (currentUser?.role === USER_ROLES.ADMIN) {
-        setUserIdForBooking(bookingToEdit.userId);
-        setUserNameForBooking(bookingToEdit.userName);
-      }
-    } else if (selectedDate) {
-      setStartDate(selectedDate);
-      setEndDate(selectedDate); // Default end date to start date
+      setStatus(bookingToEdit.status); 
+      setUserIdForBooking(bookingToEdit.userId); 
+    } else { 
+      setStartDate(initialStartDate || '');
+      setEndDate(initialEndDate || '');
+      setStatus(currentUser?.role === USER_ROLES.ADMIN ? BOOKING_STATUS.CONFIRMED : BOOKING_STATUS.RESERVED);
       if (currentUser?.role !== USER_ROLES.ADMIN && currentUser) {
         setUserIdForBooking(currentUser.id);
-        setUserNameForBooking(currentUser.name);
-      } else {
-        setUserIdForBooking('');
-        setUserNameForBooking('');
-      }
-    } else { // Reset form if no date and no edit
-        setStartDate('');
-        setEndDate('');
-        setStatus(BOOKING_STATUS.RESERVED);
-        setUserIdForBooking(currentUser?.role !== USER_ROLES.ADMIN && currentUser ? currentUser.id : '');
-        setUserNameForBooking(currentUser?.role !== USER_ROLES.ADMIN && currentUser ? currentUser.name : '');
+      } else { setUserIdForBooking(''); }
     }
-  }, [isOpen, selectedDate, bookingToEdit, currentUser]);
+  }, [isOpen, initialStartDate, initialEndDate, bookingToEdit, currentUser]);
 
-  const isDateRangeAvailable = (start, end, excludeBookingId = null) => {
-    const newStart = new Date(start);
-    const newEnd = new Date(end);
+  const isDateRangeAvailable = useCallback((start, end, excludeBookingId = null) => { // Wrapped in useCallback
+    if (!start || !end) return true; 
+    const newStart = parseDateString(start); 
+    const newEnd = parseDateString(end);
+    if (!newStart || !newEnd) return true;
 
-    for (const booking of bookings) {
+    for (const booking of bookings) { // bookings is now correctly in scope and used
       if (excludeBookingId && booking.id === excludeBookingId) continue;
-
-      const existingStart = new Date(booking.startDate);
-      const existingEnd = new Date(booking.endDate);
-
-      // Check for overlap
-      if (newStart <= existingEnd && newEnd >= existingStart) {
-        return false; // Dates overlap
-      }
+      const existingStart = parseDateString(booking.startDate);
+      const existingEnd = parseDateString(booking.endDate);
+      if (!existingStart || !existingEnd) continue;
+      if (newStart <= existingEnd && newEnd >= existingStart) return false;
     }
-    return true; // No overlap
-  };
+    return true;
+  }, [bookings]); // Added bookings as a dependency
+
+  const validateDates = (start, end) => {
+    if (!start || !end) { setError('Bitte Start- und Enddatum auswählen.'); return false; }
+    if (parseDateString(end) < parseDateString(start)) { setError('Das Enddatum darf nicht vor dem Startdatum liegen.'); return false; }
+    
+    if (!bookingToEdit) {
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        if (parseDateString(start) < today) {
+            setError('Das Startdatum darf nicht in der Vergangenheit liegen.');
+            return false;
+        }
+    }
+    return true;
+  }
 
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+    e.preventDefault(); setError(''); 
+    if (!validateDates(startDate, endDate)) { setIsLoading(false); return; }
+    
+    // For new bookings, the overlap check is now part of addBooking logic.
+    // For edits, we might still want a basic check if the *edited segment* itself becomes invalid.
+    // However, the primary overlap handling for new requests is in addBooking.
+    // If editing, and the dates change, isDateRangeAvailable can check against *other* bookings.
+    if (bookingToEdit && !isDateRangeAvailable(startDate, endDate, bookingToEdit.id)) {
+        setError('Der geänderte Zeitraum überschneidet sich mit einer anderen Buchung.');
+        setIsLoading(false);
+        return;
+    }
+
+
     setIsLoading(true);
 
-    if (!startDate || !endDate) {
-      setError('Bitte Start- und Enddatum auswählen.');
-      setIsLoading(false);
-      return;
-    }
-    if (new Date(endDate) < new Date(startDate)) {
-      setError('Das Enddatum darf nicht vor dem Startdatum liegen.');
-      setIsLoading(false);
-      return;
-    }
-
-    if (!isDateRangeAvailable(startDate, endDate, bookingToEdit?.id)) {
-        setError('Der ausgewählte Zeitraum ist bereits belegt oder teilweise belegt.');
-        setIsLoading(false);
-        return;
-    }
-
-    let finalUserId = currentUser?.id;
-    let finalUserName = currentUser?.name;
-
+    let finalUserId, finalUserName;
     if (currentUser?.role === USER_ROLES.ADMIN) {
-      if (!userIdForBooking) {
-        setError('Als Admin müssen Sie einen Benutzer für die Buchung auswählen.');
-        setIsLoading(false);
-        return;
-      }
+      if (!userIdForBooking) { setError('Als Admin bitte einen Benutzer für die Buchung auswählen.'); setIsLoading(false); return; }
       finalUserId = userIdForBooking;
-      const selectedUser = MOCK_USERS.find(u => u.id === userIdForBooking);
-      finalUserName = selectedUser ? selectedUser.name : 'Unbekannter Benutzer';
-    } else if (!currentUser) {
-        setError('Sie müssen angemeldet sein, um zu buchen.');
-        setIsLoading(false);
-        return;
+      const selUser = allUsers.find(u => u.id === userIdForBooking); 
+      finalUserName = selUser ? selUser.name : 'Unbek. Benutzer';
+    } else if (currentUser) { 
+      finalUserId = currentUser.id; 
+      finalUserName = currentUser.name; 
+    } else { 
+      setError('Sie müssen angemeldet sein, um zu buchen.'); 
+      setIsLoading(false); return; 
     }
-
-
+    
     const bookingData = { userId: finalUserId, userName: finalUserName, startDate, endDate, status };
-
+    
     try {
-      if (bookingToEdit) {
-        await updateBooking(bookingToEdit.id, bookingData);
-      } else {
-        await addBooking(bookingData);
+      if (bookingToEdit) { 
+        await updateBooking(bookingToEdit.id, bookingData); 
+      } else { 
+        await addBooking(bookingData); 
       }
-      onClose();
-    } catch (err) {
-      setError(err.message || 'Fehler beim Speichern der Buchung.');
-    } finally {
-      setIsLoading(false);
+      onClose(); 
+    } catch (err) { 
+      setError(err.message || 'Fehler beim Speichern der Buchung.'); 
+    } finally { 
+      setIsLoading(false); 
+    }
+  };
+
+  const handleDeleteClick = () => {
+    if (bookingToEdit && onDeleteBooking) {
+        console.warn(`TODO: Custom confirmation for deleting booking ${bookingToEdit.id}`);
+        const confirmed = true; 
+        if (confirmed) {
+             onDeleteBooking(bookingToEdit.id);
+        }
     }
   };
 
   if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
       <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h3 className="text-xl font-semibold mb-4 text-gray-700">{bookingToEdit ? 'Buchung bearbeiten' : 'Neue Buchung erstellen'}</h3>
+        <h3 className="text-xl font-semibold mb-4 text-gray-700">{bookingToEdit ? 'Buchungssegment bearbeiten' : 'Neue Buchung'}</h3>
         {error && <p className="bg-red-100 text-red-700 p-3 rounded-md mb-4 text-sm">{error}</p>}
         <form onSubmit={handleSubmit} className="space-y-4">
           {currentUser?.role === USER_ROLES.ADMIN && (
-            <div>
-              <label htmlFor="userSelect" className="block text-sm font-medium text-gray-600">Benutzer auswählen</label>
-              <select
-                id="userSelect"
-                value={userIdForBooking}
-                onChange={(e) => {
-                    setUserIdForBooking(e.target.value);
-                    const selectedUser = availableUsers.find(u => u.id === e.target.value);
-                    setUserNameForBooking(selectedUser ? selectedUser.name : '');
-                }}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
+            <div><label htmlFor="userSelect" className="block text-sm font-medium text-gray-600">Benutzer</label>
+              <select id="userSelect" value={userIdForBooking} onChange={(e) => setUserIdForBooking(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                 <option value="">-- Benutzer wählen --</option>
-                {availableUsers.map(user => (
-                  <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
-                ))}
+                {availableUsersForBooking.map(user => ( <option key={user.id} value={user.id}>{user.name} ({user.email})</option> ))}
               </select>
             </div>
           )}
-          <div>
-            <label htmlFor="startDate" className="block text-sm font-medium text-gray-600">Startdatum</label>
-            <input
-              type="date"
-              id="startDate"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="endDate" className="block text-sm font-medium text-gray-600">Enddatum</label>
-            <input
-              type="date"
-              id="endDate"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="status" className="block text-sm font-medium text-gray-600">Status</label>
-            <select
-              id="status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            >
-              <option value={BOOKING_STATUS.RESERVED}>Reserviert</option>
-              <option value={BOOKING_STATUS.CONFIRMED}>Bestätigt</option>
-            </select>
-          </div>
-          <div className="flex justify-end space-x-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border border-gray-300"
-            >
-              Abbrechen
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
-            >
-              {isLoading ? 'Speichern...' : (bookingToEdit ? 'Änderungen speichern' : 'Buchung erstellen')}
-            </button>
+          <div><label htmlFor="startDate" className="block text-sm font-medium text-gray-600">Startdatum</label><input type="date" id="startDate" value={startDate} onChange={(e) => setStartDate(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" /></div>
+          <div><label htmlFor="endDate" className="block text-sm font-medium text-gray-600">Enddatum</label><input type="date" id="endDate" value={endDate} onChange={(e) => setEndDate(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" /></div>
+          
+          {bookingToEdit || currentUser?.role === USER_ROLES.ADMIN ? (
+            <div>
+              <label htmlFor="status" className="block text-sm font-medium text-gray-600">Status</label>
+              <select 
+                id="status" 
+                value={status} 
+                onChange={(e) => setStatus(e.target.value)} 
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                disabled={!bookingToEdit && currentUser?.role !== USER_ROLES.ADMIN && status !== BOOKING_STATUS.ANFRAGE && !(bookingToEdit && bookingToEdit.status === BOOKING_STATUS.ANFRAGE && currentUser?.role === USER_ROLES.ADMIN)}
+              >
+                { (currentUser?.role === USER_ROLES.ADMIN || (bookingToEdit && status === BOOKING_STATUS.CONFIRMED)) && <option value={BOOKING_STATUS.CONFIRMED}>Bestätigt</option> }
+                { (currentUser?.role === USER_ROLES.ADMIN || (bookingToEdit && status === BOOKING_STATUS.RESERVED)) && <option value={BOOKING_STATUS.RESERVED}>Reserviert</option> }
+                { (bookingToEdit && status === BOOKING_STATUS.ANFRAGE) && <option value={BOOKING_STATUS.ANFRAGE}>Anfrage</option> }
+                
+                 {!bookingToEdit && currentUser?.role !== USER_ROLES.ADMIN && (
+                    <option value={BOOKING_STATUS.RESERVED} disabled>Reserviert (Standard)</option>
+                 )}
+              </select>
+            </div>
+          ) : (
+             <p className="text-sm text-gray-500">Status: Ihre Anfrage wird als 'Reserviert' oder 'Anfrage' (bei Überschneidung) eingetragen.</p>
+          )}
+
+
+          <div className="flex justify-between items-center pt-2">
+            <div>
+                {bookingToEdit && (currentUser?.role === USER_ROLES.ADMIN || currentUser?.id === bookingToEdit.userId) && (
+                    <button 
+                        type="button" 
+                        onClick={handleDeleteClick}
+                        disabled={isLoading}
+                        className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                    >
+                        Löschen
+                    </button>
+                )}
+            </div>
+            <div className="flex space-x-3">
+                <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border border-gray-300">Abbrechen</button>
+                <button type="submit" disabled={isLoading} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">{isLoading ? 'Speichern...' : (bookingToEdit ? 'Speichern' : 'Erstellen')}</button>
+            </div>
           </div>
         </form>
       </div>
@@ -561,216 +670,226 @@ const BookingModal = ({ isOpen, onClose, selectedDate, bookingToEdit }) => {
   );
 };
 
-const AdminDashboard = ({ setCurrentView, openBookingModal, setBookingToEdit }) => {
-  const { bookings, deleteBooking, updateBooking } = useBookings();
-  const { currentUser } = useAuth();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+const AdminDashboard = ({ handleOpenNewBookingModal, handleOpenEditBookingModal }) => {
+  const { bookings, deleteBooking: deleteBookingFromCtx, updateBooking } = useBookings(); 
+  const { currentUser, loading: authLoading } = useAuth(); 
+  const [searchTerm, setSearchTerm] = useState(''); const [filterStatus, setFilterStatus] = useState('');
 
-  if (currentUser?.role !== USER_ROLES.ADMIN) {
-    setCurrentView('calendar'); // Redirect if not admin
-    return <p className="p-4 text-red-500">Zugriff verweigert. Sie müssen Administrator sein.</p>;
-  }
+  if (authLoading) return <LoadingSpinner />; if (!currentUser || currentUser.role !== USER_ROLES.ADMIN) return null; 
 
   const filteredBookings = bookings
     .filter(b => b.userName.toLowerCase().includes(searchTerm.toLowerCase()) || b.id.toLowerCase().includes(searchTerm.toLowerCase()))
     .filter(b => filterStatus ? b.status === filterStatus : true)
-    .sort((a, b) => new Date(a.startDate) - new Date(b.startDate)); // Sort by start date
-
-  const handleEdit = (booking) => {
-    setBookingToEdit(booking);
-    openBookingModal(null); // Open modal without specific date, it will use bookingToEdit
-  };
-
-  const handleDelete = async (bookingId) => {
-    if (window.confirm('Sind Sie sicher, dass Sie diese Buchung löschen möchten?')) { // Replace with custom modal in real app
-      await deleteBooking(bookingId);
-    }
-  };
-
-  const handleChangeStatus = async (bookingId, newStatus) => {
-    await updateBooking(bookingId, { status: newStatus });
-  };
+    .sort((a,b) => parseDateString(a.startDate).getTime() - parseDateString(b.startDate).getTime());
+  
+  const handleDelete = async (bookingId) => { 
+    console.warn(`TODO: Custom confirmation modal for deleting booking ${bookingId}`); if (true) await deleteBookingFromCtx(bookingId); 
+  }; 
+  const handleChangeStatus = async (bookingId, newStatus) => await updateBooking(bookingId, { status: newStatus }); 
 
   return (
     <div className="container mx-auto p-4">
       <div className="bg-white p-6 rounded-lg shadow-xl">
-        <h2 className="text-2xl font-bold text-blue-600 mb-6">Admin Dashboard - Buchungsverwaltung</h2>
-        
+        <h2 className="text-2xl font-bold text-blue-600 mb-6">Admin Dashboard</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <input 
-            type="text"
-            placeholder="Suche nach Name oder Buchungs-ID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-          <select 
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
+          <input type="text" placeholder="Suche Name/ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"/>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
             <option value="">Alle Status</option>
             <option value={BOOKING_STATUS.RESERVED}>Reserviert</option>
             <option value={BOOKING_STATUS.CONFIRMED}>Bestätigt</option>
+            <option value={BOOKING_STATUS.ANFRAGE}>Anfrage</option> 
           </select>
         </div>
-
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Benutzer</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Startdatum</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Enddatum</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aktionen</th>
-              </tr>
-            </thead>
+            <thead className="bg-gray-50"><tr>{['ID', 'Benutzer', 'Start', 'Ende', 'Status', 'Aktionen'].map(h => (<th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>))}</tr></thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredBookings.length === 0 && (
-                <tr><td colSpan="6" className="text-center py-4 text-gray-500">Keine Buchungen gefunden.</td></tr>
-              )}
-              {filteredBookings.map(booking => (
-                <tr key={booking.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 truncate" title={booking.id}>{booking.id.substring(0,8)}...</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{booking.userName}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{booking.startDate}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{booking.endDate}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm">
-                    <select
-                        value={booking.status}
-                        onChange={(e) => handleChangeStatus(booking.id, e.target.value)}
-                        className={`p-1 rounded-md text-xs ${booking.status === BOOKING_STATUS.CONFIRMED ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}
-                    >
-                        <option value={BOOKING_STATUS.RESERVED}>Reserviert</option>
-                        <option value={BOOKING_STATUS.CONFIRMED}>Bestätigt</option>
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button onClick={() => handleEdit(booking)} className="text-blue-600 hover:text-blue-800 p-1" title="Bearbeiten">
-                      <Edit3 size={18} />
-                    </button>
-                    <button onClick={() => handleDelete(booking.id)} className="text-red-600 hover:text-red-800 p-1" title="Löschen">
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredBookings.length === 0 && (<tr><td colSpan="6" className="text-center py-4 text-gray-500">Keine Buchungen.</td></tr>)}
+              {filteredBookings.map(b => (<tr key={b.id} className="hover:bg-gray-50">
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700 truncate" title={b.id}>{b.id.substring(7,13)}</td><td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{b.userName}</td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{b.startDate}</td><td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{b.endDate}</td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm">
+                  <select value={b.status} onChange={(e) => handleChangeStatus(b.id, e.target.value)}
+                      className={`p-1 rounded-md text-xs ${
+                        b.status === BOOKING_STATUS.CONFIRMED ? 'bg-green-100 text-green-700' :
+                        b.status === BOOKING_STATUS.RESERVED ? 'bg-yellow-100 text-yellow-700' :
+                        b.status === BOOKING_STATUS.ANFRAGE ? 'bg-orange-100 text-orange-700' : '' 
+                      }`}>
+                    <option value={BOOKING_STATUS.RESERVED}>Reserviert</option>
+                    <option value={BOOKING_STATUS.CONFIRMED}>Bestätigt</option>
+                    <option value={BOOKING_STATUS.ANFRAGE}>Anfrage</option>
+                  </select>
+                </td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm font-medium space-x-1 sm:space-x-2">
+                  <button onClick={() => handleOpenEditBookingModal(b)} className="p-1 text-blue-600 hover:text-blue-800" title="Bearbeiten"><Edit3 size={18}/></button>
+                  <button onClick={() => handleDelete(b.id)} className="p-1 text-red-600 hover:text-red-800" title="Löschen"><Trash2 size={18}/></button>
+                </td></tr>))}
             </tbody>
           </table>
         </div>
-         <div className="mt-6 flex justify-end">
-            <button
-                onClick={() => { setBookingToEdit(null); openBookingModal(null);}}
-                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md flex items-center space-x-2"
-            >
-                <PlusCircle size={20} />
-                <span>Neue Buchung für Benutzer</span>
-            </button>
-        </div>
+        <div className="mt-6 flex justify-end"><button onClick={() => handleOpenNewBookingModal(null)} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 flex items-center space-x-2"><PlusCircle size={20}/><span>Neue Buchung</span></button></div>
       </div>
     </div>
   );
 };
 
-const UserManagementPage = ({ setCurrentView }) => {
-  const { currentUser } = useAuth();
-  // In a real app, users would be fetched from an API
-  const [users, setUsers] = useState(MOCK_USERS); 
+const UserModal = ({ isOpen, onClose, userToEdit, onSave }) => {
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [phone, setPhone] = useState('');
+    const [role, setRole] = useState(USER_ROLES.USER);
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        if (userToEdit) {
+            setName(userToEdit.name || '');
+            setEmail(userToEdit.email || '');
+            setPhone(userToEdit.phone || '');
+            setRole(userToEdit.role || USER_ROLES.USER);
+            setPassword(''); 
+        } else { 
+            setName(''); setEmail(''); setPassword(''); setPhone(''); setRole(USER_ROLES.USER);
+        }
+        setError(''); 
+    }, [isOpen, userToEdit]);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        if (!name || !email) { setError('Name und Email sind Pflichtfelder.'); return; }
+        if (!userToEdit && !password) { setError('Passwort ist für neue Benutzer ein Pflichtfeld.'); return; }
+        if (!/\S+@\S+\.\S+/.test(email)) { setError('Bitte eine gültige Email-Adresse eingeben.'); return; }
+        
+        setIsLoading(true);
+        const userData = { name, email, phone, role };
+        if (password) { 
+            userData.password = password;
+        }
+
+        try {
+            await onSave(userData, userToEdit ? userToEdit.id : null);
+            onClose();
+        } catch (err) {
+            setError(err.message || 'Fehler beim Speichern des Benutzers.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
+            <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <h3 className="text-xl font-semibold mb-6 text-gray-700">{userToEdit ? 'Benutzer bearbeiten' : 'Neuen Benutzer hinzufügen'}</h3>
+                {error && <p className="bg-red-100 text-red-700 p-3 rounded-md mb-4 text-sm">{error}</p>}
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label htmlFor="userName" className="block text-sm font-medium text-gray-600">Name</label>
+                        <div className="mt-1 relative rounded-md shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><UserCircle className="h-5 w-5 text-gray-400" /></div>
+                            <input type="text" id="userName" value={name} onChange={(e) => setName(e.target.value)} required className="mt-1 block w-full pl-10 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Max Mustermann"/>
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="userEmail" className="block text-sm font-medium text-gray-600">Email</label>
+                         <div className="mt-1 relative rounded-md shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Mail className="h-5 w-5 text-gray-400" /></div>
+                            <input type="email" id="userEmail" value={email} onChange={(e) => setEmail(e.target.value)} required className="mt-1 block w-full pl-10 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="max@example.com"/>
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="userPassword" className="block text-sm font-medium text-gray-600">Passwort {userToEdit ? '(leer lassen, um nicht zu ändern)' : ''}</label>
+                        <div className="mt-1 relative rounded-md shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><KeyRound className="h-5 w-5 text-gray-400" /></div>
+                            <input type="password" id="userPassword" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 block w-full pl-10 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Mind. 6 Zeichen"/>
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="userPhone" className="block text-sm font-medium text-gray-600">Telefon (optional)</label>
+                        <div className="mt-1 relative rounded-md shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Phone className="h-5 w-5 text-gray-400" /></div>
+                            <input type="tel" id="userPhone" value={phone} onChange={(e) => setPhone(e.target.value)} className="mt-1 block w-full pl-10 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="0123456789"/>
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="userRole" className="block text-sm font-medium text-gray-600">Rolle</label>
+                        <select id="userRole" value={role} onChange={(e) => setRole(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <option value={USER_ROLES.USER}>Benutzer</option>
+                            <option value={USER_ROLES.ADMIN}>Admin</option>
+                        </select>
+                    </div>
+                    <div className="flex justify-end space-x-3 pt-4">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border border-gray-300">Abbrechen</button>
+                        <button type="submit" disabled={isLoading} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">
+                            {isLoading ? 'Speichern...' : (userToEdit ? 'Änderungen speichern' : 'Benutzer erstellen')}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+
+const UserManagementPage = ({ openUserModal, setUserToEditGlobal }) => { 
+  const { currentUser, users, deleteUser, loading: authLoading } = useAuth(); 
   const [searchTerm, setSearchTerm] = useState('');
+  
+  if (authLoading) return <LoadingSpinner />; 
+  if (!currentUser || currentUser.role !== USER_ROLES.ADMIN) return null; 
 
-  if (currentUser?.role !== USER_ROLES.ADMIN) {
-    setCurrentView('calendar'); // Redirect if not admin
-    return <p className="p-4 text-red-500">Zugriff verweigert. Nur Administratoren können Benutzer verwalten.</p>;
-  }
-
-  const filteredUsers = users.filter(user =>
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredUsers = users.filter(u => 
+    u.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (u.phone && u.phone.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  // Placeholder functions for user actions
-  const handleEditUser = (userId) => {
-    alert(`Edit user ${userId} (Funktion nicht implementiert)`); // Replace with modal
+  const handleEditUser = (user) => { 
+    setUserToEditGlobal(user); 
+    openUserModal(); 
   };
 
-  const handleDeleteUser = (userId) => {
-    if (window.confirm('Sind Sie sicher, dass Sie diesen Benutzer löschen möchten?')) { // Replace with custom modal
-      setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
-      // In real app: await API_deleteUser(userId);
-      alert(`Benutzer ${userId} gelöscht (simuliert).`);
+  const handleDeleteUser = async (userId) => { 
+    console.warn(`TODO: Custom confirmation modal for deleting user ${userId}`); 
+    if (true) { 
+        try {
+            await deleteUser(userId); 
+        } catch (error) {
+            console.error("Fehler beim Löschen des Benutzers:", error);
+        }
     }
   };
   
-  const handleAddUser = () => {
-    alert('Neuen Benutzer hinzufügen (Funktion nicht implementiert)'); // Replace with modal
+  const handleAddUser = () => { 
+    setUserToEditGlobal(null); 
+    openUserModal(); 
   };
-
 
   return (
     <div className="container mx-auto p-4">
       <div className="bg-white p-6 rounded-lg shadow-xl">
         <h2 className="text-2xl font-bold text-blue-600 mb-6">Benutzerverwaltung</h2>
-        
-        <div className="flex justify-between items-center mb-6">
-            <input 
-                type="text"
-                placeholder="Suche nach Name oder Email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm w-full md:w-1/3"
-            />
-            <button
-                onClick={handleAddUser}
-                className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md flex items-center space-x-2"
-            >
-                <PlusCircle size={20} />
-                <span>Benutzer hinzufügen</span>
-            </button>
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+          <input type="text" placeholder="Suche Name/Email/Telefon..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm w-full sm:w-1/2 md:w-1/3"/>
+          <button onClick={handleAddUser} className="px-4 py-2 text-sm font-medium text-white bg-green-500 hover:bg-green-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center space-x-2 w-full sm:w-auto"><PlusCircle size={20}/><span>Benutzer hinzufügen</span></button>
         </div>
-
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rolle</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aktionen</th>
-              </tr>
-            </thead>
+            <thead className="bg-gray-50"><tr>{['Name','Email','Telefon', 'Rolle','Aktionen'].map(h=>(<th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>))}</tr></thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.length === 0 && (
-                <tr><td colSpan="5" className="text-center py-4 text-gray-500">Keine Benutzer gefunden.</td></tr>
-              )}
-              {filteredUsers.map(user => (
-                <tr key={user.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 truncate" title={user.id}>{user.id.substring(0,8)}...</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{user.name}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.role === USER_ROLES.ADMIN ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-                    }`}>
-                        {user.role}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button onClick={() => handleEditUser(user.id)} className="text-blue-600 hover:text-blue-800 p-1" title="Bearbeiten">
-                      <Edit3 size={18} />
-                    </button>
-                    {/* Prevent deleting oneself or the main admin for safety in mock */}
-                    {currentUser?.id !== user.id && user.id !== 'admin1' && (
-                        <button onClick={() => handleDeleteUser(user.id)} className="text-red-600 hover:text-red-800 p-1" title="Löschen">
-                        <Trash2 size={18} />
-                        </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {filteredUsers.length === 0 && (<tr><td colSpan="5" className="text-center py-4 text-gray-500">Keine Benutzer.</td></tr>)}
+              {filteredUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50">
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{u.name}</td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{u.email}</td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{u.phone || '-'}</td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${u.role===USER_ROLES.ADMIN ? 'bg-red-100 text-red-800':'bg-blue-100 text-blue-800'}`}>{u.role}</span></td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm font-medium space-x-1 sm:space-x-2">
+                  <button onClick={()=>handleEditUser(u)} className="p-1 text-blue-600 hover:text-blue-800" title="Bearbeiten"><Edit3 size={18}/></button>
+                  {currentUser?.id!==u.id && u.id!=='admin1' && (<button onClick={()=>handleDeleteUser(u.id)} className="p-1 text-red-600 hover:text-red-800" title="Löschen"><Trash2 size={18}/></button>)}
+                </td></tr>))}
             </tbody>
           </table>
         </div>
@@ -779,102 +898,285 @@ const UserManagementPage = ({ setCurrentView }) => {
   );
 };
 
+// New Component for Occupancy Statistics
+const OccupancyStatsPage = () => {
+    const { bookings } = useBookings();
+    const { currentUser, loading: authLoading } = useAuth();
+    const currentYear = new Date().getFullYear();
+    const [selectedYear, setSelectedYear] = useState(currentYear); // Default to current year
 
-// Main App Component
+    const yearsForSelect = useMemo(() => {
+        const uniqueYears = new Set();
+        bookings.forEach(b => {
+            uniqueYears.add(parseDateString(b.startDate).getFullYear());
+            uniqueYears.add(parseDateString(b.endDate).getFullYear());
+        });
+        // Add current year and +/- a few years for selection if no bookings exist for those
+        uniqueYears.add(currentYear -1);
+        uniqueYears.add(currentYear);
+        uniqueYears.add(currentYear + 1);
+        return Array.from(uniqueYears).sort((a,b) => a - b);
+    }, [bookings, currentYear]);
+
+
+    const occupancyData = useMemo(() => {
+        if (!bookings.length) return { bookedDays: 0, totalDaysInYear: isLeapYear(selectedYear) ? 366 : 365, percentage: 0 };
+
+        const totalDaysInYear = isLeapYear(selectedYear) ? 366 : 365;
+        const bookedDaySet = new Set();
+
+        bookings.forEach(booking => {
+            // Only count 'confirmed' or 'reserved' for main occupancy. 'Anfrage' is a pending state.
+            if (booking.status !== BOOKING_STATUS.CONFIRMED && booking.status !== BOOKING_STATUS.RESERVED) {
+                return;
+            }
+            
+            let currentIterDate = parseDateString(booking.startDate);
+            const bookingEndDate = parseDateString(booking.endDate);
+
+            if (!currentIterDate || !bookingEndDate) return;
+
+            while (currentIterDate <= bookingEndDate) {
+                if (currentIterDate.getFullYear() === selectedYear) {
+                    bookedDaySet.add(formatDateToYYYYMMDD(currentIterDate));
+                }
+                currentIterDate.setDate(currentIterDate.getDate() + 1);
+            }
+        });
+        
+        const bookedDays = bookedDaySet.size;
+        const percentage = totalDaysInYear > 0 ? (bookedDays / totalDaysInYear) * 100 : 0;
+        return { bookedDays, totalDaysInYear, percentage: parseFloat(percentage.toFixed(2)) };
+
+    }, [bookings, selectedYear]);
+
+    if (authLoading) return <LoadingSpinner />;
+    if (!currentUser) return null; // Should be redirected by AppContent
+
+    return (
+        <div className="container mx-auto p-4">
+            <div className="bg-white p-8 rounded-lg shadow-xl max-w-2xl mx-auto">
+                <h2 className="text-3xl font-bold text-blue-600 mb-8 text-center">Belegungsstatistik</h2>
+                
+                <div className="mb-6">
+                    <label htmlFor="yearSelect" className="block text-sm font-medium text-gray-700 mb-1">Jahr auswählen:</label>
+                    <select 
+                        id="yearSelect"
+                        value={selectedYear} 
+                        onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    >
+                        {yearsForSelect.map(year => (
+                            <option key={year} value={year}>{year}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="bg-gray-50 p-6 rounded-lg space-y-4">
+                    <div className="flex justify-between items-center">
+                        <span className="text-lg text-gray-600">Ausgewähltes Jahr:</span>
+                        <span className="text-lg font-semibold text-blue-600">{selectedYear}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-lg text-gray-600">Belegte Tage (Bestätigt/Reserviert):</span>
+                        <span className="text-lg font-semibold text-blue-600">{occupancyData.bookedDays}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-lg text-gray-600">Tage im Jahr:</span>
+                        <span className="text-lg font-semibold text-blue-600">{occupancyData.totalDaysInYear}</span>
+                    </div>
+                    <hr className="my-4"/>
+                    <div className="flex justify-between items-center">
+                        <span className="text-xl text-gray-700 font-semibold">Auslastung:</span>
+                        <span className="text-2xl font-bold text-green-600">{occupancyData.percentage}%</span>
+                    </div>
+                </div>
+                 <div className="mt-6 text-xs text-gray-500">
+                    <p>* Die Statistik berücksichtigt alle bestätigten und reservierten Tage innerhalb eines Buchungszeitraums, die in das ausgewählte Jahr fallen. 'Anfragen' werden nicht als belegt gezählt.</p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 export default function App() {
-  const [currentView, setCurrentView] = useState('login'); // 'login', 'calendar', 'admin', 'userManagement'
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedDateForModal, setSelectedDateForModal] = useState(null);
-  const [bookingToEdit, setBookingToEdit] = useState(null); // For editing bookings
+  return (<AuthProvider><BookingProviderWrapper><AppContent /></BookingProviderWrapper></AuthProvider>);
+}
 
-  const openBookingModal = (date, booking = null) => {
-    setSelectedDateForModal(date);
-    setBookingToEdit(booking);
-    setIsModalOpen(true);
+const AppContent = () => {
+  const [currentView, setCurrentView] = useState('login');
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [bookingModalParams, setBookingModalParams] = useState({ startDate: null, endDate: null, bookingToEdit: null });
+  const [selectionStart, setSelectionStart] = useState(null); 
+  const [selectionEnd, setSelectionEnd] = useState(null);   
+  
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [userToEdit, setUserToEdit] = useState(null);
+  const { currentUser, loading: authLoading, addUser, updateUser } = useAuth(); 
+  const { bookings, deleteBooking } = useBookings(); 
+
+
+  useEffect(() => {
+    if (authLoading) return; 
+    const protectedViews = ['calendar', 'admin', 'userManagement', 'statistics']; 
+    const adminViews = ['admin', 'userManagement'];
+    if (currentUser) {
+      if (currentView === 'login') { setCurrentView('calendar'); } 
+      else if (adminViews.includes(currentView) && currentUser.role !== USER_ROLES.ADMIN) { setCurrentView('calendar'); }
+    } else { if (protectedViews.includes(currentView)) { setCurrentView('login'); } }
+  }, [currentUser, currentView, authLoading, setCurrentView]);
+
+  const getBookingsOnDate = (dateStr) => { 
+    return bookings.filter(b => { 
+        const current = parseDateString(dateStr);
+        const bookingStart = parseDateString(b.startDate);
+        const bookingEnd = parseDateString(b.endDate);
+        if (!current || !bookingStart || !bookingEnd) return false;
+        return current >= bookingStart && current <= bookingEnd;
+    });
+  };
+
+  const handleCalendarDateClick = (dateStr) => {
+    const clickedDateObj = parseDateString(dateStr);
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    if (clickedDateObj < today) {
+        console.warn("Vergangene Daten können nicht ausgewählt oder bearbeitet werden.");
+        setSelectionStart(null); 
+        setSelectionEnd(null);
+        return; 
+    }
+
+    const bookingsOnClickedDate = getBookingsOnDate(dateStr);
+    
+    if (bookingsOnClickedDate.length > 0) {
+        const userOwnedBooking = bookingsOnClickedDate.find(b => b.userId === currentUser?.id);
+        const bookingToPotentiallyEdit = userOwnedBooking || (currentUser?.role === USER_ROLES.ADMIN ? bookingsOnClickedDate[0] : null);
+
+        if (bookingToPotentiallyEdit) {
+            setSelectionStart(null); 
+            setSelectionEnd(null);
+            handleOpenEditBookingModal(bookingToPotentiallyEdit);
+            return; 
+        }
+    }
+    
+    if (!selectionStart) {
+        setSelectionStart(dateStr); 
+        setSelectionEnd(null);
+    } else { 
+        const currentSelectionStart = parseDateString(selectionStart);
+        let finalStartDate = selectionStart; 
+        let finalEndDate = dateStr;
+        if (clickedDateObj < currentSelectionStart) { 
+            finalStartDate = dateStr; 
+            finalEndDate = selectionStart; 
+        }
+        setSelectionEnd(finalEndDate); 
+        if (finalStartDate !== selectionStart) { 
+            setSelectionStart(finalStartDate); 
+        }
+        setBookingModalParams({ startDate: finalStartDate, endDate: finalEndDate, bookingToEdit: null });
+        setIsBookingModalOpen(true);
+    }
+  };
+
+  const handleOpenNewBookingModal = (booking = null) => { 
+    setSelectionStart(booking ? booking.startDate : null); 
+    setSelectionEnd(booking ? booking.endDate : null);
+    setBookingModalParams({ 
+        startDate: booking ? booking.startDate : null, 
+        endDate: booking ? booking.endDate : null, 
+        bookingToEdit: booking 
+    });
+    setIsBookingModalOpen(true);
+  };
+
+  const handleOpenEditBookingModal = (bookingSegment) => { 
+    setSelectionStart(null); setSelectionEnd(null);
+    setBookingModalParams({ 
+      startDate: bookingSegment.startDate, 
+      endDate: bookingSegment.endDate, 
+      bookingToEdit: bookingSegment 
+    });
+    setIsBookingModalOpen(true);
   };
 
   const closeBookingModal = () => {
-    setIsModalOpen(false);
-    setSelectedDateForModal(null);
-    setBookingToEdit(null);
+    setIsBookingModalOpen(false); setSelectionStart(null); setSelectionEnd(null);
+    setBookingModalParams({ startDate: null, endDate: null, bookingToEdit: null });
+  };
+
+  const handleDeleteBookingInModal = async (bookingId) => {
+    console.warn(`TODO: Implement custom confirmation modal for deleting booking segment ${bookingId} from BookingModal`);
+    if (true) { 
+        try {
+            await deleteBooking(bookingId); 
+            closeBookingModal(); 
+        } catch (error) {
+            console.error("Fehler beim Löschen des Buchungssegments im Modal:", error);
+        }
+    }
+  };
+
+  const openUserModal = () => setIsUserModalOpen(true);
+  const closeUserModal = () => { setIsUserModalOpen(false); setUserToEdit(null); };
+  
+  const handleSaveUser = async (userData, userIdToUpdate) => {
+    if (userIdToUpdate) { 
+        await updateUser(userIdToUpdate, userData);
+    } else { 
+        await addUser(userData);
+    }
   };
   
-  // This effect ensures that if a user logs out, they are redirected to the login page.
-  // It also handles initial routing if a user is already logged in (though not fully implemented here).
-  const { currentUser, loading: authLoading } = useAuth() || {}; // Handle case where useAuth might not be ready
-  
-  useEffect(() => {
-    if (!authLoading) {
-      if (!currentUser && currentView !== 'login') {
-        setCurrentView('login');
-      } else if (currentUser && currentView === 'login') {
-        setCurrentView('calendar');
-      }
-    }
-  }, [currentUser, currentView, authLoading, setCurrentView]);
-
-
   const renderView = () => {
-    if (authLoading) {
-      return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>;
-    }
+    if (authLoading && !currentUser) { return <LoadingSpinner />; }
     switch (currentView) {
-      case 'login':
-        return <LoginPage setCurrentView={setCurrentView} />;
-      case 'calendar':
-        return <CalendarView setCurrentView={setCurrentView} openBookingModal={openBookingModal} />;
-      case 'admin':
-        return <AdminDashboard setCurrentView={setCurrentView} openBookingModal={openBookingModal} setBookingToEdit={setBookingToEdit} />;
-      case 'userManagement':
-        return <UserManagementPage setCurrentView={setCurrentView} />;
-      default:
-        return <LoginPage setCurrentView={setCurrentView} />;
+      case 'login': return <LoginPage />;
+      case 'calendar': return <CalendarView selectionStart={selectionStart} selectionEnd={selectionEnd} onDateClick={handleCalendarDateClick} handleOpenNewBookingModal={() => handleOpenNewBookingModal()} />;
+      case 'admin': return <AdminDashboard handleOpenNewBookingModal={() => handleOpenNewBookingModal(null)} handleOpenEditBookingModal={handleOpenEditBookingModal} />;
+      case 'userManagement': return <UserManagementPage openUserModal={openUserModal} setUserToEditGlobal={setUserToEdit} />;
+      case 'statistics': return <OccupancyStatsPage />;
+      default: return <LoginPage />;
     }
   };
 
   return (
-    <AuthProvider>
-      {/* Re-render children of AuthProvider when currentUser changes by using a key or by ensuring consumers like BookingProvider re-evaluate */}
-      <BookingProviderWrapper> 
-        <div className="min-h-screen bg-gray-50 font-sans">
-          <Navbar setCurrentView={setCurrentView} />
-          <main>
-            {renderView()}
-          </main>
-          <BookingModal
-            isOpen={isModalOpen}
-            onClose={closeBookingModal}
-            selectedDate={selectedDateForModal}
-            bookingToEdit={bookingToEdit}
-          />
-          <Footer />
-        </div>
-      </BookingProviderWrapper>
-    </AuthProvider>
+    <div className="min-h-screen bg-gray-50 font-sans flex flex-col">
+        <Navbar setCurrentView={setCurrentView} />
+        <main className="flex-grow">{renderView()}</main>
+        <BookingModal 
+            isOpen={isBookingModalOpen} 
+            onClose={closeBookingModal} 
+            initialStartDate={bookingModalParams.startDate} 
+            initialEndDate={bookingModalParams.endDate}
+            bookingToEdit={bookingModalParams.bookingToEdit}
+            onDeleteBooking={handleDeleteBookingInModal} 
+            />
+        <UserModal isOpen={isUserModalOpen} onClose={closeUserModal} userToEdit={userToEdit} onSave={handleSaveUser} />
+        <Footer />
+    </div>
   );
-}
+};
 
-// Wrapper to ensure BookingProvider has access to AuthContext
 const BookingProviderWrapper = ({ children }) => {
-  const auth = useAuth(); // This will be null on first render of App if AuthProvider is sibling
-  if (!auth) return null; // Or a loading indicator
+  const auth = useAuth(); 
+  if (auth === null) { return <LoadingSpinner />; }
   return <BookingProvider>{children}</BookingProvider>;
 };
 
-const Footer = () => {
-    return (
-        <footer className="bg-gray-800 text-white text-center p-4 mt-auto">
-            <p>&copy; {new Date().getFullYear()} Ferienhaus Planer. Alle Rechte vorbehalten.</p>
-            <p className="text-xs mt-1">Dies ist eine Demo-Anwendung.</p>
-        </footer>
-    );
-}
+const Footer = () => (<footer className="bg-gray-800 text-white text-center p-4 mt-auto"><p>&copy; {new Date().getFullYear()} Ferienhaus Planer.</p><p className="text-xs mt-1">Demo-Anwendung.</p></footer>);
 
-// Hinweis zur Struktur und zum Backend:
-// Diese React-Anwendung stellt das Frontend dar (APP/frontend/).
-// Ein entsprechendes Backend (APP/backend/) würde benötigt, um:
-// - Benutzerauthentifizierung zu verwalten (z.B. mit Express, Passport.js)
-// - Buchungsdaten in einer MariaDB-Datenbank über Sequelize zu speichern und abzurufen.
-// - API-Endpunkte bereitzustellen (z.B. /api/login, /api/bookings, /api/users).
-// - Das Backend würde auf Port 5049 laufen, das Frontend (Entwicklungsserver) auf 5050.
-// - Für die Produktion würde das Frontend gebaut (npm run build) und statisch vom Backend-Server oder einem Webserver ausgeliefert.
+/* Tailwind @layer examples for global CSS (e.g. src/index.css)
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  // .input-style { @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm; }
+  // .btn-primary { @apply px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500; }
+}
+*/
