@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext, useMemo, useCallback } from 'react'; 
-import { ChevronLeft, ChevronRight, CalendarDays, UserCircle, LogIn, LogOut, PlusCircle, Edit3, Trash2, ShieldCheck, Home, Users, Mail, Phone, KeyRound, BarChart3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, UserCircle, LogIn, LogOut, PlusCircle, Edit3, Trash2, Home, Users, Mail, Phone, KeyRound, BarChart3, ListChecks } from 'lucide-react';
 
 // Constants
 const USER_ROLES = {
@@ -43,23 +43,25 @@ const MOCK_USERS_INITIAL = [
   { id: 'user2', name: 'Erika Musterfrau', email: 'erika@example.com', password: 'password123', role: USER_ROLES.USER, phone: '01701234568' },
   { id: 'user3', name: 'Erwin Mustermann', email: 'erwin@example.com', password: 'password123', role: USER_ROLES.USER, phone: '01701234569' },
   { id: 'admin1', name: 'Admina Administrator', email: 'admin@example.com', password: 'adminpassword', role: USER_ROLES.ADMIN, phone: '01609876543' },
-
 ];
 
 const MOCK_INITIAL_BOOKINGS = [
-  { id: 'booking1', userId: 'user1', userName: 'Max Mustermann', startDate: '2025-07-10', endDate: '2025-07-15', status: BOOKING_STATUS.CONFIRMED, propertyId: 'ferienhaus1' },
+  { id: 'booking1', originalRequestId: 'req_initial_1', userId: 'user1', userName: 'Max Mustermann', startDate: '2025-07-10', endDate: '2025-07-15', status: BOOKING_STATUS.CONFIRMED, propertyId: 'ferienhaus1' },
 ];
 
 // Helper: Parse YYYY-MM-DD string to local Date object (midnight)
 const parseDateString = (dateStr) => {
   if (!dateStr) return null;
   const parts = dateStr.split('-');
+  // Month is 0-indexed in JavaScript Date
   return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
 };
 
 // Helper: Format Date object to YYYY-MM-DD string (local)
 const formatDateToYYYYMMDD = (date) => {
-  if (!date) return '';
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+    return '';
+  }
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const day = date.getDate().toString().padStart(2, '0');
@@ -158,6 +160,7 @@ const BookingProvider = ({ children }) => {
             const newBookingSegmentsData = [];
             let currentSegmentStartDate = null;
             let currentSegmentStatus = null;
+            const originalRequestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`; 
 
             for (let dayIter = new Date(reqStartDate); dayIter <= reqEndDate; dayIter.setDate(dayIter.getDate() + 1)) {
                 const currentDay = new Date(dayIter); 
@@ -186,6 +189,7 @@ const BookingProvider = ({ children }) => {
                         endDate: formatDateToYYYYMMDD(new Date(currentDay.getTime() - 86400000)), 
                         status: currentSegmentStatus,
                         userId, userName, propertyId: 'ferienhaus1',
+                        originalRequestId, 
                     });
                     currentSegmentStartDate = new Date(currentDay); 
                     currentSegmentStatus = dayStatusForNewBooking;
@@ -198,12 +202,13 @@ const BookingProvider = ({ children }) => {
                     endDate: formatDateToYYYYMMDD(reqEndDate), 
                     status: currentSegmentStatus,
                     userId, userName, propertyId: 'ferienhaus1',
+                    originalRequestId, 
                 });
             }
             
             const newBookingsToAdd = newBookingSegmentsData.map(segment => ({
                 ...segment,
-                id: `booking${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 
+                id: `booking_${segment.status}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, 
             }));
 
             setBookings(prev => [...prev, ...newBookingsToAdd]);
@@ -216,9 +221,19 @@ const BookingProvider = ({ children }) => {
     setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, ...updates } : b)); resolve(true);
   }, 500)), []); 
 
-  const deleteBookingFromContext = useCallback(async (bookingId) => new Promise(resolve => setTimeout(() => { 
-    setBookings(prev => prev.filter(b => b.id !== bookingId)); resolve(true);
-  }, 500)), []); 
+  const deleteBookingFromContext = useCallback(async (bookingIdToDelete) => { 
+    return new Promise(resolve => setTimeout(() => {
+      setBookings(prevBookings => {
+        const bookingToDelete = prevBookings.find(b => b.id === bookingIdToDelete);
+        if (bookingToDelete && bookingToDelete.originalRequestId) {
+          return prevBookings.filter(b => b.originalRequestId !== bookingToDelete.originalRequestId);
+        } else {
+          return prevBookings.filter(b => b.id !== bookingIdToDelete);
+        }
+      });
+      resolve(true);
+    }, 500));
+  }, []); 
 
   const bookingContextValue = useMemo(() => ({ 
     bookings, 
@@ -255,8 +270,12 @@ const Navbar = ({ setCurrentView }) => {
             <>
               <button onClick={() => setCurrentView('calendar')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><CalendarDays size={20}/> <span>Kalender</span></button>
               <button onClick={() => setCurrentView('statistics')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><BarChart3 size={20}/> <span>Statistik</span></button>
-              {currentUser.role === USER_ROLES.ADMIN && (<button onClick={() => setCurrentView('admin')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><ShieldCheck size={20}/> <span>Admin</span></button>)}
-              <button onClick={() => setCurrentView('userManagement')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><Users size={20}/> <span className="hidden sm:inline">Benutzer</span></button>
+              {currentUser.role === USER_ROLES.ADMIN && (
+                <>
+                  <button onClick={() => setCurrentView('bookingListAdmin')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><ListChecks size={20}/> <span>Buchungsübersicht</span></button>
+                  <button onClick={() => setCurrentView('userManagement')} className="hover:bg-blue-700 px-2 py-2 sm:px-3 rounded-md flex items-center space-x-1 text-sm sm:text-base"><Users size={20}/> <span className="hidden sm:inline">Benutzer</span></button>
+                </>
+              )}
             </>
           )}
           {currentUser ? (
@@ -304,7 +323,7 @@ const LoginPage = () => {
   );
 };
 
-const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNewBookingModal }) => {
+const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNewBookingModal, handleBookingIndicatorClick }) => { 
   const [currentDisplayDate, setCurrentDisplayDate] = useState(new Date()); 
   const { bookings } = useBookings(); 
   const { currentUser, loading: authLoading } = useAuth(); 
@@ -371,7 +390,7 @@ const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNew
           {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(day => (<div key={day} className="py-2 text-xs sm:text-base">{day}</div>))}
         </div>
         <div className="grid grid-cols-7 gap-1">
-          {leadingEmptyDays.map((_, index) => (<div key={`empty-${index}`} className="border rounded-md min-h-[8rem] sm:min-h-[9rem] md:min-h-[10rem]"></div>))}
+          {leadingEmptyDays.map((_, index) => (<div key={`empty-${index}`} className="border rounded-md min-h-[7rem] sm:min-h-[7.5rem] md:min-h-[8rem]"></div>))}
           {monthDays.map(day => {
             const dayDateObj = new Date(year, month, day);
             dayDateObj.setHours(0,0,0,0); 
@@ -387,7 +406,7 @@ const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNew
                 baseCellStyle += isBookedSolid ? ' hover:bg-rose-100' : ' hover:bg-green-100';
             }
             if (isPastDate) {
-                baseCellStyle = 'bg-gray-50 text-gray-300 cursor-not-allowed'; 
+                baseCellStyle = 'bg-gray-100 text-gray-400 cursor-not-allowed'; // Paler background for past dates
             }
             
             let selectionStyle = '';
@@ -422,12 +441,12 @@ const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNew
             return (
               <div
                 key={day}
-                className={`relative border rounded-md min-h-[8rem] sm:min-h-[9rem] md:min-h-[10rem] p-1 sm:p-2 flex flex-col ${isPastDate ? 'cursor-not-allowed' : 'cursor-pointer'} transition-colors duration-150 ${finalCellStyle} overflow-hidden`}
+                className={`relative border rounded-md min-h-[7rem] sm:min-h-[7.5rem] md:min-h-[8rem] p-1 sm:p-2 flex flex-col ${isPastDate ? 'cursor-not-allowed' : 'cursor-pointer'} transition-colors duration-150 ${finalCellStyle} overflow-hidden`}
                 onClick={() => onDateClick(dayDateStr)} 
                 title={tooltipText || dayDateStr} 
               >
                 <div className="flex-grow"> 
-                    <span className={`font-medium text-sm sm:text-base ${isBookedSolid && !isPastDate ? 'text-rose-700' : !isPastDate ? 'text-green-700' : 'text-gray-300'} ${publicHoliday && !isPastDate ? 'text-purple-700 font-bold' : ''}`}>{day}</span>
+                    <span className={`font-medium text-sm sm:text-base ${isBookedSolid && !isPastDate ? 'text-rose-700' : !isPastDate ? 'text-green-700' : 'text-gray-400'} ${publicHoliday && !isPastDate ? 'text-purple-700 font-bold' : ''}`}>{day}</span>
                     
                     {!isPastDate && publicHoliday && (
                     <div className="text-xs text-purple-600 truncate mt-0.5" title={publicHoliday.name}>
@@ -449,7 +468,14 @@ const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNew
                                 default: bookingStyle = 'bg-gray-400 text-white';
                             }
                             return (
-                                <div key={booking.id} className={`text-xs p-0.5 sm:p-1 rounded-sm truncate ${bookingStyle}`}>
+                                <div 
+                                  key={booking.id} 
+                                  className={`text-xs p-0.5 sm:p-1 rounded-sm truncate ${bookingStyle} hover:opacity-80`}
+                                  onClick={(e) => {
+                                    e.stopPropagation(); 
+                                    handleBookingIndicatorClick(booking); 
+                                  }}
+                                >
                                     {booking.userName.split(' ')[0]} ({statusIndicator})
                                 </div>
                             );
@@ -486,56 +512,76 @@ const CalendarView = ({ selectionStart, selectionEnd, onDateClick, handleOpenNew
   );
 };
 
-const BookingModal = ({ isOpen, onClose, initialStartDate, initialEndDate, bookingToEdit, onDeleteBooking }) => { 
+const BookingModal = ({ isOpen, onClose, initialStartDate, initialEndDate, bookingToEdit, onDeleteBooking, initialOverallStartDate, initialOverallEndDate }) => { 
   const { currentUser, users: allUsers } = useAuth(); 
-  const { addBooking, updateBooking, bookings } = useBookings(); // Correctly destructure bookings
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const { addBooking, updateBooking, bookings: allBookingsFromContext } = useBookings(); 
+  const [displayStartDate, setDisplayStartDate] = useState('');
+  const [displayEndDate, setDisplayEndDate] = useState('');  
+  const [actualStartDate, setActualStartDate] = useState('');
+  const [actualEndDate, setActualEndDate] = useState('');  
+
   const [userIdForBooking, setUserIdForBooking] = useState('');
   const [status, setStatus] = useState(BOOKING_STATUS.RESERVED); 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
   const availableUsersForBooking = useMemo(() => allUsers.filter(u => u.role === USER_ROLES.USER), [allUsers]);
+  const isGroupEdit = useMemo(() => bookingToEdit && bookingToEdit.originalRequestId, [bookingToEdit]);
 
 
   useEffect(() => {
     if (bookingToEdit) {
-      setStartDate(bookingToEdit.startDate);
-      setEndDate(bookingToEdit.endDate);
-      setStatus(bookingToEdit.status); 
-      setUserIdForBooking(bookingToEdit.userId); 
+        if (isGroupEdit && initialOverallStartDate && initialOverallEndDate) {
+            setDisplayStartDate(initialOverallStartDate);
+            setDisplayEndDate(initialOverallEndDate);
+        } else {
+            setDisplayStartDate(bookingToEdit.startDate);
+            setDisplayEndDate(bookingToEdit.endDate);
+        }
+        setActualStartDate(bookingToEdit.startDate); 
+        setActualEndDate(bookingToEdit.endDate);
+        setStatus(bookingToEdit.status); 
+        setUserIdForBooking(bookingToEdit.userId); 
     } else { 
-      setStartDate(initialStartDate || '');
-      setEndDate(initialEndDate || '');
+      setDisplayStartDate(initialStartDate || '');
+      setDisplayEndDate(initialEndDate || '');
+      setActualStartDate(initialStartDate || '');
+      setActualEndDate(initialEndDate || '');
       setStatus(currentUser?.role === USER_ROLES.ADMIN ? BOOKING_STATUS.CONFIRMED : BOOKING_STATUS.RESERVED);
       if (currentUser?.role !== USER_ROLES.ADMIN && currentUser) {
         setUserIdForBooking(currentUser.id);
       } else { setUserIdForBooking(''); }
     }
-  }, [isOpen, initialStartDate, initialEndDate, bookingToEdit, currentUser]);
+  }, [isOpen, initialStartDate, initialEndDate, bookingToEdit, currentUser, isGroupEdit, initialOverallStartDate, initialOverallEndDate]);
 
-  const isDateRangeAvailable = useCallback((start, end, excludeBookingId = null) => { // Wrapped in useCallback
+  const isDateRangeAvailable = useCallback((start, end, excludeBookingId = null) => { 
     if (!start || !end) return true; 
     const newStart = parseDateString(start); 
     const newEnd = parseDateString(end);
     if (!newStart || !newEnd) return true;
 
-    for (const booking of bookings) { // bookings is now correctly in scope and used
+    if (!allBookingsFromContext) return true; 
+
+    for (const booking of allBookingsFromContext) { 
       if (excludeBookingId && booking.id === excludeBookingId) continue;
-      const existingStart = parseDateString(booking.startDate);
-      const existingEnd = parseDateString(booking.endDate);
-      if (!existingStart || !existingEnd) continue;
-      if (newStart <= existingEnd && newEnd >= existingStart) return false;
+      if (bookingToEdit && booking.id === bookingToEdit.id && booking.status === BOOKING_STATUS.ANFRAGE) {
+          if (start === bookingToEdit.startDate && end === bookingToEdit.endDate) continue;
+      }
+      if (booking.status === BOOKING_STATUS.CONFIRMED || booking.status === BOOKING_STATUS.RESERVED) {
+        const existingStart = parseDateString(booking.startDate);
+        const existingEnd = parseDateString(booking.endDate);
+        if (!existingStart || !existingEnd) continue;
+        if (newStart <= existingEnd && newEnd >= existingStart) return false;
+      }
     }
     return true;
-  }, [bookings]); // Added bookings as a dependency
+  }, [allBookingsFromContext, bookingToEdit]); 
 
   const validateDates = (start, end) => {
     if (!start || !end) { setError('Bitte Start- und Enddatum auswählen.'); return false; }
     if (parseDateString(end) < parseDateString(start)) { setError('Das Enddatum darf nicht vor dem Startdatum liegen.'); return false; }
     
-    if (!bookingToEdit) {
+    if (!bookingToEdit) { 
         const today = new Date();
         today.setHours(0,0,0,0);
         if (parseDateString(start) < today) {
@@ -546,21 +592,19 @@ const BookingModal = ({ isOpen, onClose, initialStartDate, initialEndDate, booki
     return true;
   }
 
-
   const handleSubmit = async (e) => {
     e.preventDefault(); setError(''); 
-    if (!validateDates(startDate, endDate)) { setIsLoading(false); return; }
     
-    // For new bookings, the overlap check is now part of addBooking logic.
-    // For edits, we might still want a basic check if the *edited segment* itself becomes invalid.
-    // However, the primary overlap handling for new requests is in addBooking.
-    // If editing, and the dates change, isDateRangeAvailable can check against *other* bookings.
-    if (bookingToEdit && !isDateRangeAvailable(startDate, endDate, bookingToEdit.id)) {
-        setError('Der geänderte Zeitraum überschneidet sich mit einer anderen Buchung.');
+    const submitStartDate = bookingToEdit ? actualStartDate : displayStartDate;
+    const submitEndDate = bookingToEdit ? actualEndDate : displayEndDate;
+
+    if (!validateDates(submitStartDate, submitEndDate)) { setIsLoading(false); return; }
+    
+    if (bookingToEdit && status !== BOOKING_STATUS.ANFRAGE && !isDateRangeAvailable(submitStartDate, submitEndDate, bookingToEdit.id)) {
+        setError('Der geänderte Zeitraum überschneidet sich mit einer anderen bestätigten/reservierten Buchung.');
         setIsLoading(false);
         return;
     }
-
 
     setIsLoading(true);
 
@@ -578,11 +622,24 @@ const BookingModal = ({ isOpen, onClose, initialStartDate, initialEndDate, booki
       setIsLoading(false); return; 
     }
     
-    const bookingData = { userId: finalUserId, userName: finalUserName, startDate, endDate, status };
+    const bookingData = { 
+        userId: finalUserId, 
+        userName: finalUserName, 
+        startDate: submitStartDate, 
+        endDate: submitEndDate, 
+        status 
+    };
     
     try {
       if (bookingToEdit) { 
-        await updateBooking(bookingToEdit.id, bookingData); 
+        const segmentUpdateData = { 
+            status, 
+            userId: userIdForBooking, 
+            userName: allUsers.find(u => u.id === userIdForBooking)?.name || bookingToEdit.userName,
+            startDate: actualStartDate, 
+            endDate: actualEndDate,
+        };
+        await updateBooking(bookingToEdit.id, segmentUpdateData); 
       } else { 
         await addBooking(bookingData); 
       }
@@ -599,7 +656,7 @@ const BookingModal = ({ isOpen, onClose, initialStartDate, initialEndDate, booki
         console.warn(`TODO: Custom confirmation for deleting booking ${bookingToEdit.id}`);
         const confirmed = true; 
         if (confirmed) {
-             onDeleteBooking(bookingToEdit.id);
+             onDeleteBooking(bookingToEdit.id); 
         }
     }
   };
@@ -608,42 +665,97 @@ const BookingModal = ({ isOpen, onClose, initialStartDate, initialEndDate, booki
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[100]">
       <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h3 className="text-xl font-semibold mb-4 text-gray-700">{bookingToEdit ? 'Buchungssegment bearbeiten' : 'Neue Buchung'}</h3>
+        <h3 className="text-xl font-semibold mb-4 text-gray-700">
+            {bookingToEdit ? `Segment bearbeiten (${bookingToEdit.status})` : 'Neue Buchung'}
+        </h3>
+        {isGroupEdit && bookingToEdit && (
+            <p className="text-xs text-gray-500 mb-2">
+                Teil der ursprünglichen Anfrage: {displayStartDate} bis {displayEndDate}. Änderungen gelten nur für dieses Segment.
+            </p>
+        )}
         {error && <p className="bg-red-100 text-red-700 p-3 rounded-md mb-4 text-sm">{error}</p>}
         <form onSubmit={handleSubmit} className="space-y-4">
           {currentUser?.role === USER_ROLES.ADMIN && (
             <div><label htmlFor="userSelect" className="block text-sm font-medium text-gray-600">Benutzer</label>
-              <select id="userSelect" value={userIdForBooking} onChange={(e) => setUserIdForBooking(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+              <select 
+                id="userSelect" 
+                value={userIdForBooking} 
+                onChange={(e) => setUserIdForBooking(e.target.value)} 
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                disabled={isLoading}
+              >
                 <option value="">-- Benutzer wählen --</option>
                 {availableUsersForBooking.map(user => ( <option key={user.id} value={user.id}>{user.name} ({user.email})</option> ))}
               </select>
             </div>
           )}
-          <div><label htmlFor="startDate" className="block text-sm font-medium text-gray-600">Startdatum</label><input type="date" id="startDate" value={startDate} onChange={(e) => setStartDate(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" /></div>
-          <div><label htmlFor="endDate" className="block text-sm font-medium text-gray-600">Enddatum</label><input type="date" id="endDate" value={endDate} onChange={(e) => setEndDate(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" /></div>
-          
-          {bookingToEdit || currentUser?.role === USER_ROLES.ADMIN ? (
-            <div>
-              <label htmlFor="status" className="block text-sm font-medium text-gray-600">Status</label>
-              <select 
-                id="status" 
-                value={status} 
-                onChange={(e) => setStatus(e.target.value)} 
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                disabled={!bookingToEdit && currentUser?.role !== USER_ROLES.ADMIN && status !== BOOKING_STATUS.ANFRAGE && !(bookingToEdit && bookingToEdit.status === BOOKING_STATUS.ANFRAGE && currentUser?.role === USER_ROLES.ADMIN)}
-              >
-                { (currentUser?.role === USER_ROLES.ADMIN || (bookingToEdit && status === BOOKING_STATUS.CONFIRMED)) && <option value={BOOKING_STATUS.CONFIRMED}>Bestätigt</option> }
-                { (currentUser?.role === USER_ROLES.ADMIN || (bookingToEdit && status === BOOKING_STATUS.RESERVED)) && <option value={BOOKING_STATUS.RESERVED}>Reserviert</option> }
-                { (bookingToEdit && status === BOOKING_STATUS.ANFRAGE) && <option value={BOOKING_STATUS.ANFRAGE}>Anfrage</option> }
-                
-                 {!bookingToEdit && currentUser?.role !== USER_ROLES.ADMIN && (
-                    <option value={BOOKING_STATUS.RESERVED} disabled>Reserviert (Standard)</option>
-                 )}
-              </select>
+          <div>
+            <label htmlFor="startDate" className="block text-sm font-medium text-gray-600">
+                {isGroupEdit && bookingToEdit ? 'Start (Segment)' : 'Startdatum'}
+            </label>
+            <input 
+                type="date" id="startDate" 
+                value={isGroupEdit && bookingToEdit ? actualStartDate : displayStartDate} 
+                onChange={(e) => {
+                    const newDate = e.target.value;
+                    if (!(isGroupEdit && bookingToEdit)) setDisplayStartDate(newDate);
+                    setActualStartDate(newDate); 
+                }}
+                required 
+                readOnly={isGroupEdit && !!bookingToEdit} 
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+          </div>
+          <div>
+            <label htmlFor="endDate" className="block text-sm font-medium text-gray-600">
+                 {isGroupEdit && bookingToEdit ? 'Ende (Segment)' : 'Enddatum'}
+            </label>
+            <input 
+                type="date" id="endDate" 
+                value={isGroupEdit && bookingToEdit ? actualEndDate : displayEndDate} 
+                onChange={(e) => {
+                    const newDate = e.target.value;
+                    if (!(isGroupEdit && bookingToEdit)) setDisplayEndDate(newDate);
+                    setActualEndDate(newDate);
+                }}
+                required 
+                readOnly={isGroupEdit && !!bookingToEdit} 
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
             </div>
-          ) : (
-             <p className="text-sm text-gray-500">Status: Ihre Anfrage wird als 'Reserviert' oder 'Anfrage' (bei Überschneidung) eingetragen.</p>
-          )}
+          
+          {/* Status field logic */}
+          <div>
+            <label htmlFor="status" className="block text-sm font-medium text-gray-600">Status</label>
+            <select 
+              id="status" 
+              value={status} 
+              onChange={(e) => setStatus(e.target.value)} 
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              disabled={isLoading || (bookingToEdit && bookingToEdit.status === BOOKING_STATUS.ANFRAGE && currentUser?.role !== USER_ROLES.ADMIN)}
+            >
+              {/* Admin can choose any status, or if editing a confirmed/reserved booking */}
+              {(currentUser?.role === USER_ROLES.ADMIN || (bookingToEdit && (status === BOOKING_STATUS.CONFIRMED || status === BOOKING_STATUS.RESERVED))) && (
+                  <>
+                    <option value={BOOKING_STATUS.CONFIRMED}>Bestätigt</option>
+                    <option value={BOOKING_STATUS.RESERVED}>Reserviert</option>
+                  </>
+              )}
+              {/* Always show "Anfrage" if it's the current status or if admin is editing */}
+              {( (bookingToEdit && status === BOOKING_STATUS.ANFRAGE) || currentUser?.role === USER_ROLES.ADMIN ) && (
+                  <option value={BOOKING_STATUS.ANFRAGE}>Anfrage</option>
+              )}
+              
+              {/* For new bookings by non-admin, status is determined by logic, show default */}
+               {!bookingToEdit && currentUser?.role !== USER_ROLES.ADMIN && (
+                  <option value={BOOKING_STATUS.RESERVED} disabled>Reserviert (Standard)</option>
+               )}
+            </select>
+            {!bookingToEdit && currentUser?.role !== USER_ROLES.ADMIN && (
+                <p className="text-xs text-gray-500 mt-1">Ihr Wunschstatus ist 'Reserviert'. Bei Überschneidungen wird 'Anfrage' erstellt.</p>
+            )}
+             {bookingToEdit && bookingToEdit.status === BOOKING_STATUS.ANFRAGE && currentUser?.role !== USER_ROLES.ADMIN && (
+                <p className="text-xs text-gray-500 mt-1">Dies ist eine Anfrage. Nur ein Admin kann den Status ändern.</p>
+            )}
+          </div>
 
 
           <div className="flex justify-between items-center pt-2">
@@ -678,7 +790,7 @@ const AdminDashboard = ({ handleOpenNewBookingModal, handleOpenEditBookingModal 
   if (authLoading) return <LoadingSpinner />; if (!currentUser || currentUser.role !== USER_ROLES.ADMIN) return null; 
 
   const filteredBookings = bookings
-    .filter(b => b.userName.toLowerCase().includes(searchTerm.toLowerCase()) || b.id.toLowerCase().includes(searchTerm.toLowerCase()))
+    .filter(b => b.userName.toLowerCase().includes(searchTerm.toLowerCase()) || b.id.toLowerCase().includes(searchTerm.toLowerCase()) || (b.originalRequestId && b.originalRequestId.includes(searchTerm)))
     .filter(b => filterStatus ? b.status === filterStatus : true)
     .sort((a,b) => parseDateString(a.startDate).getTime() - parseDateString(b.startDate).getTime());
   
@@ -692,7 +804,7 @@ const AdminDashboard = ({ handleOpenNewBookingModal, handleOpenEditBookingModal 
       <div className="bg-white p-6 rounded-lg shadow-xl">
         <h2 className="text-2xl font-bold text-blue-600 mb-6">Admin Dashboard</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <input type="text" placeholder="Suche Name/ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"/>
+          <input type="text" placeholder="Suche Name/ID/RequestID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"/>
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
             <option value="">Alle Status</option>
             <option value={BOOKING_STATUS.RESERVED}>Reserviert</option>
@@ -702,11 +814,13 @@ const AdminDashboard = ({ handleOpenNewBookingModal, handleOpenEditBookingModal 
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50"><tr>{['ID', 'Benutzer', 'Start', 'Ende', 'Status', 'Aktionen'].map(h => (<th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>))}</tr></thead>
+            <thead className="bg-gray-50"><tr>{['Segment ID', 'Orig. Req. ID', 'Benutzer', 'Start', 'Ende', 'Status', 'Aktionen'].map(h => (<th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>))}</tr></thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredBookings.length === 0 && (<tr><td colSpan="6" className="text-center py-4 text-gray-500">Keine Buchungen.</td></tr>)}
+              {filteredBookings.length === 0 && (<tr><td colSpan="7" className="text-center py-4 text-gray-500">Keine Buchungen.</td></tr>)}
               {filteredBookings.map(b => (<tr key={b.id} className="hover:bg-gray-50">
-                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700 truncate" title={b.id}>{b.id.substring(7,13)}</td><td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{b.userName}</td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-700 truncate" title={b.id}>{b.id.substring(b.id.lastIndexOf('_') + 1)}</td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500 truncate" title={b.originalRequestId}>{b.originalRequestId ? b.originalRequestId.substring(4, 13) + '...' : '-'}</td>
+                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{b.userName}</td>
                 <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{b.startDate}</td><td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{b.endDate}</td>
                 <td className="px-3 py-3 whitespace-nowrap text-sm">
                   <select value={b.status} onChange={(e) => handleChangeStatus(b.id, e.target.value)}
@@ -903,7 +1017,7 @@ const OccupancyStatsPage = () => {
     const { bookings } = useBookings();
     const { currentUser, loading: authLoading } = useAuth();
     const currentYear = new Date().getFullYear();
-    const [selectedYear, setSelectedYear] = useState(currentYear); // Default to current year
+    const [selectedYear, setSelectedYear] = useState(currentYear); 
 
     const yearsForSelect = useMemo(() => {
         const uniqueYears = new Set();
@@ -911,7 +1025,6 @@ const OccupancyStatsPage = () => {
             uniqueYears.add(parseDateString(b.startDate).getFullYear());
             uniqueYears.add(parseDateString(b.endDate).getFullYear());
         });
-        // Add current year and +/- a few years for selection if no bookings exist for those
         uniqueYears.add(currentYear -1);
         uniqueYears.add(currentYear);
         uniqueYears.add(currentYear + 1);
@@ -926,7 +1039,6 @@ const OccupancyStatsPage = () => {
         const bookedDaySet = new Set();
 
         bookings.forEach(booking => {
-            // Only count 'confirmed' or 'reserved' for main occupancy. 'Anfrage' is a pending state.
             if (booking.status !== BOOKING_STATUS.CONFIRMED && booking.status !== BOOKING_STATUS.RESERVED) {
                 return;
             }
@@ -951,7 +1063,7 @@ const OccupancyStatsPage = () => {
     }, [bookings, selectedYear]);
 
     if (authLoading) return <LoadingSpinner />;
-    if (!currentUser) return null; // Should be redirected by AppContent
+    if (!currentUser) return null; 
 
     return (
         <div className="container mx-auto p-4">
@@ -1007,7 +1119,13 @@ export default function App() {
 const AppContent = () => {
   const [currentView, setCurrentView] = useState('login');
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  const [bookingModalParams, setBookingModalParams] = useState({ startDate: null, endDate: null, bookingToEdit: null });
+  const [bookingModalParams, setBookingModalParams] = useState({ 
+      startDate: null, 
+      endDate: null, 
+      bookingToEdit: null,
+      overallStartDate: null, 
+      overallEndDate: null 
+  });
   const [selectionStart, setSelectionStart] = useState(null); 
   const [selectionEnd, setSelectionEnd] = useState(null);   
   
@@ -1019,15 +1137,15 @@ const AppContent = () => {
 
   useEffect(() => {
     if (authLoading) return; 
-    const protectedViews = ['calendar', 'admin', 'userManagement', 'statistics']; 
-    const adminViews = ['admin', 'userManagement'];
+    const protectedViews = ['calendar', 'admin', 'userManagement', 'statistics', 'bookingListAdmin']; 
+    const adminViews = ['admin', 'userManagement', 'bookingListAdmin'];
     if (currentUser) {
       if (currentView === 'login') { setCurrentView('calendar'); } 
       else if (adminViews.includes(currentView) && currentUser.role !== USER_ROLES.ADMIN) { setCurrentView('calendar'); }
     } else { if (protectedViews.includes(currentView)) { setCurrentView('login'); } }
   }, [currentUser, currentView, authLoading, setCurrentView]);
 
-  const getBookingsOnDate = (dateStr) => { 
+  const getBookingsOnDate = useCallback((dateStr) => {  
     return bookings.filter(b => { 
         const current = parseDateString(dateStr);
         const bookingStart = parseDateString(b.startDate);
@@ -1035,9 +1153,13 @@ const AppContent = () => {
         if (!current || !bookingStart || !bookingEnd) return false;
         return current >= bookingStart && current <= bookingEnd;
     });
-  };
+  }, [bookings]); 
+  
+  const handleBookingIndicatorClick = useCallback((bookingSegment) => { 
+    handleOpenEditBookingModal(bookingSegment);
+  }, [bookings]); // Added bookings as handleOpenEditBookingModal uses it
 
-  const handleCalendarDateClick = (dateStr) => {
+  const handleCalendarDateClick = useCallback((dateStr) => {
     const clickedDateObj = parseDateString(dateStr);
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -1047,20 +1169,6 @@ const AppContent = () => {
         setSelectionStart(null); 
         setSelectionEnd(null);
         return; 
-    }
-
-    const bookingsOnClickedDate = getBookingsOnDate(dateStr);
-    
-    if (bookingsOnClickedDate.length > 0) {
-        const userOwnedBooking = bookingsOnClickedDate.find(b => b.userId === currentUser?.id);
-        const bookingToPotentiallyEdit = userOwnedBooking || (currentUser?.role === USER_ROLES.ADMIN ? bookingsOnClickedDate[0] : null);
-
-        if (bookingToPotentiallyEdit) {
-            setSelectionStart(null); 
-            setSelectionEnd(null);
-            handleOpenEditBookingModal(bookingToPotentiallyEdit);
-            return; 
-        }
     }
     
     if (!selectionStart) {
@@ -1078,38 +1186,83 @@ const AppContent = () => {
         if (finalStartDate !== selectionStart) { 
             setSelectionStart(finalStartDate); 
         }
-        setBookingModalParams({ startDate: finalStartDate, endDate: finalEndDate, bookingToEdit: null });
+        setBookingModalParams({ 
+            startDate: finalStartDate, 
+            endDate: finalEndDate, 
+            bookingToEdit: null,
+            overallStartDate: finalStartDate, 
+            overallEndDate: finalEndDate 
+        });
         setIsBookingModalOpen(true);
     }
-  };
+  }, [selectionStart, setSelectionStart, setSelectionEnd, setBookingModalParams, setIsBookingModalOpen]);
 
-  const handleOpenNewBookingModal = (booking = null) => { 
-    setSelectionStart(booking ? booking.startDate : null); 
-    setSelectionEnd(booking ? booking.endDate : null);
+  const handleOpenNewBookingModal = useCallback((booking = null) => { 
+    const isEditing = !!booking;
+    let overallStart = booking ? booking.startDate : null;
+    let overallEnd = booking ? booking.endDate : null;
+
+    if (isEditing && booking.originalRequestId) {
+        const relatedSegments = bookings.filter(b => b.originalRequestId === booking.originalRequestId);
+        if (relatedSegments.length > 0) {
+            const startDates = relatedSegments.map(s => parseDateString(s.startDate)).filter(d => d);
+            const endDates = relatedSegments.map(s => parseDateString(s.endDate)).filter(d => d);
+            if (startDates.length > 0) {
+                overallStart = formatDateToYYYYMMDD(new Date(Math.min(...startDates.map(d => d.getTime()))));
+            }
+            if (endDates.length > 0) {
+                overallEnd = formatDateToYYYYMMDD(new Date(Math.max(...endDates.map(d => d.getTime()))));
+            }
+        }
+    }
+
+    setSelectionStart(isEditing ? null : (booking ? booking.startDate : null)); 
+    setSelectionEnd(isEditing ? null : (booking ? booking.endDate : null));
     setBookingModalParams({ 
         startDate: booking ? booking.startDate : null, 
         endDate: booking ? booking.endDate : null, 
-        bookingToEdit: booking 
+        bookingToEdit: booking,
+        overallStartDate: overallStart,
+        overallEndDate: overallEnd
     });
     setIsBookingModalOpen(true);
-  };
+  }, [bookings, setSelectionStart, setSelectionEnd, setBookingModalParams, setIsBookingModalOpen]);
 
-  const handleOpenEditBookingModal = (bookingSegment) => { 
+  const handleOpenEditBookingModal = useCallback((bookingSegment) => { 
+    let overallStart = bookingSegment.startDate;
+    let overallEnd = bookingSegment.endDate;
+
+    if (bookingSegment.originalRequestId) {
+        const relatedSegments = bookings.filter(b => b.originalRequestId === bookingSegment.originalRequestId);
+        if (relatedSegments.length > 0) {
+            const startDates = relatedSegments.map(s => parseDateString(s.startDate)).filter(d => d);
+            const endDates = relatedSegments.map(s => parseDateString(s.endDate)).filter(d => d);
+             if (startDates.length > 0) {
+                overallStart = formatDateToYYYYMMDD(new Date(Math.min(...startDates.map(d => d.getTime()))));
+            }
+            if (endDates.length > 0) {
+                overallEnd = formatDateToYYYYMMDD(new Date(Math.max(...endDates.map(d => d.getTime()))));
+            }
+        }
+    }
+    
     setSelectionStart(null); setSelectionEnd(null);
     setBookingModalParams({ 
       startDate: bookingSegment.startDate, 
-      endDate: bookingSegment.endDate, 
-      bookingToEdit: bookingSegment 
+      endDate: bookingSegment.endDate,   
+      bookingToEdit: bookingSegment,
+      overallStartDate: overallStart,    
+      overallEndDate: overallEnd         
     });
     setIsBookingModalOpen(true);
-  };
+  }, [bookings, setSelectionStart, setSelectionEnd, setBookingModalParams, setIsBookingModalOpen]);
 
-  const closeBookingModal = () => {
+  const closeBookingModal = useCallback(() => {
     setIsBookingModalOpen(false); setSelectionStart(null); setSelectionEnd(null);
-    setBookingModalParams({ startDate: null, endDate: null, bookingToEdit: null });
-  };
+    setBookingModalParams({ startDate: null, endDate: null, bookingToEdit: null, overallStartDate: null, overallEndDate: null });
+  }, [setIsBookingModalOpen, setSelectionStart, setSelectionEnd, setBookingModalParams]);
 
-  const handleDeleteBookingInModal = async (bookingId) => {
+  const handleDeleteBookingInModal = useCallback(async (bookingId) => {
     console.warn(`TODO: Implement custom confirmation modal for deleting booking segment ${bookingId} from BookingModal`);
     if (true) { 
         try {
@@ -1119,25 +1272,36 @@ const AppContent = () => {
             console.error("Fehler beim Löschen des Buchungssegments im Modal:", error);
         }
     }
-  };
+  }, [deleteBooking, closeBookingModal]);
 
-  const openUserModal = () => setIsUserModalOpen(true);
-  const closeUserModal = () => { setIsUserModalOpen(false); setUserToEdit(null); };
+  const openUserModal = useCallback(() => setIsUserModalOpen(true), [setIsUserModalOpen]);
+  const closeUserModal = useCallback(() => { setIsUserModalOpen(false); setUserToEdit(null); }, [setIsUserModalOpen, setUserToEdit]);
   
-  const handleSaveUser = async (userData, userIdToUpdate) => {
+  const handleSaveUser = useCallback(async (userData, userIdToUpdate) => {
     if (userIdToUpdate) { 
         await updateUser(userIdToUpdate, userData);
     } else { 
         await addUser(userData);
     }
-  };
+  }, [addUser, updateUser]);
   
   const renderView = () => {
     if (authLoading && !currentUser) { return <LoadingSpinner />; }
     switch (currentView) {
       case 'login': return <LoginPage />;
-      case 'calendar': return <CalendarView selectionStart={selectionStart} selectionEnd={selectionEnd} onDateClick={handleCalendarDateClick} handleOpenNewBookingModal={() => handleOpenNewBookingModal()} />;
-      case 'admin': return <AdminDashboard handleOpenNewBookingModal={() => handleOpenNewBookingModal(null)} handleOpenEditBookingModal={handleOpenEditBookingModal} />;
+      case 'calendar': return <CalendarView 
+                                selectionStart={selectionStart} 
+                                selectionEnd={selectionEnd} 
+                                onDateClick={handleCalendarDateClick} 
+                                handleOpenNewBookingModal={() => handleOpenNewBookingModal()} 
+                                handleBookingIndicatorClick={handleBookingIndicatorClick} 
+                             />;
+      case 'admin': 
+      case 'bookingListAdmin': 
+                return <AdminDashboard 
+                            handleOpenNewBookingModal={() => handleOpenNewBookingModal(null)} 
+                            handleOpenEditBookingModal={handleOpenEditBookingModal} 
+                        />;
       case 'userManagement': return <UserManagementPage openUserModal={openUserModal} setUserToEditGlobal={setUserToEdit} />;
       case 'statistics': return <OccupancyStatsPage />;
       default: return <LoginPage />;
@@ -1155,6 +1319,8 @@ const AppContent = () => {
             initialEndDate={bookingModalParams.endDate}
             bookingToEdit={bookingModalParams.bookingToEdit}
             onDeleteBooking={handleDeleteBookingInModal} 
+            initialOverallStartDate={bookingModalParams.overallStartDate} 
+            initialOverallEndDate={bookingModalParams.overallEndDate}
             />
         <UserModal isOpen={isUserModalOpen} onClose={closeUserModal} userToEdit={userToEdit} onSave={handleSaveUser} />
         <Footer />
@@ -1168,15 +1334,5 @@ const BookingProviderWrapper = ({ children }) => {
   return <BookingProvider>{children}</BookingProvider>;
 };
 
-const Footer = () => (<footer className="bg-gray-800 text-white text-center p-4 mt-auto"><p>&copy; {new Date().getFullYear()} Ferienhaus Planer.</p><p className="text-xs mt-1">Demo-Anwendung.</p></footer>);
+const Footer = () => (<footer className="bg-gray-800 text-white text-center p-4 mt-auto"><p>&copy; {new Date().getFullYear()} Casa Regno Dei Cieli.</p></footer>);
 
-/* Tailwind @layer examples for global CSS (e.g. src/index.css)
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer components {
-  // .input-style { @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm; }
-  // .btn-primary { @apply px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500; }
-}
-*/
