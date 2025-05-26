@@ -262,7 +262,7 @@ const Navbar = ({ setCurrentView }) => {
     <nav className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-50">
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setCurrentView(currentUser ? 'calendar' : 'login')}>
-            <Home size={28} /><h1 className="text-xl font-bold">Ferienhaus Planer</h1>
+            <Home size={28} /><h1 className="text-xl font-bold">{env.REACT_APP_APP_TITLE}</h1>
         </div>
         <div className="space-x-2 sm:space-x-4 flex items-center">
           {currentUser && (
@@ -310,13 +310,6 @@ const LoginPage = () => {
           <div><label htmlFor="password" className="block text-sm font-medium text-gray-600">Passwort</label><input type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Ihr Passwort"/></div>
           <div><button type="submit" disabled={isLoading} className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">{isLoading ? 'Anmelden...' : 'Anmelden'}</button></div>
         </form>
-      </div>
-      <div className="mt-6 text-sm text-gray-600 bg-white p-4 rounded-lg shadow-md w-full max-w-md">
-        <p className="font-semibold">Test-Anmeldedaten:</p>
-        <ul className="list-disc list-inside mt-1">
-          <li>Benutzer: <code className="bg-gray-200 text-gray-800 px-1 rounded">max@example.com</code> / <code className="bg-gray-200 text-gray-800 px-1 rounded">password123</code></li>
-          <li>Admin: <code className="bg-gray-200 text-gray-800 px-1 rounded">admin@example.com</code> / <code className="bg-gray-200 text-gray-800 px-1 rounded">adminpassword</code></li>
-        </ul>
       </div>
     </div>
   );
