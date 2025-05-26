@@ -1,0 +1,6 @@
+services:
+  frontend:
+    build:
+      context: ./frontend # Pfad zum Verzeichnis mit dem Dockerfile
+      dockerfile: Dockerfile # Name des Dockerfiles
+    container_name: casa_app_frontend

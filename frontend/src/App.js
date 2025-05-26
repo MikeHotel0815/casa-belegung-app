@@ -1349,5 +1349,5 @@ const BookingProviderWrapper = ({ children }) => {
   return <BookingProvider>{children}</BookingProvider>;
 };
 
-const Footer = () => (<footer className="bg-gray-800 text-white text-center p-4 mt-auto"><p>&copy; {new Date().getFullYear()} Casa Regno Dei Cieli.</p></footer>);
+const Footer = () => (<footer className="bg-gray-800 text-white text-center p-4 mt-auto"><p>&copy; {new Date().getFullYear()} Casa Regno Dei Cieli (v1.0)</p></footer>);
 

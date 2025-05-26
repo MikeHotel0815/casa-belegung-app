@@ -34,7 +34,7 @@ RUN npm run build
 FROM nginx:stable-alpine
 
 # Entferne die Standard Nginx Konfiguration
-RUN rm /etc/nginx/conf.d/default.conf
+#RUN rm /etc/nginx/conf.d/default.conf
 
 # Kopiere eine eigene Nginx Konfigurationsdatei (siehe Hinweis unten)
 # Für den Anfang kann dies optional sein, wenn die Standardeinstellungen von Nginx ausreichen
