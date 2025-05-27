@@ -258,11 +258,12 @@ const LoadingSpinner = () => (<div className="flex justify-center items-center h
 const Navbar = ({ setCurrentView }) => {
   const { currentUser, logout: authLogout } = useAuth();
   const handleLogout = () => { authLogout(); setCurrentView('login'); };
+  const appTitle = process.env.REACT_APP_APP_TITLE || 'Casa Regno Dei Cieli';
   return (
     <nav className="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-50">
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center space-x-2 cursor-pointer" onClick={() => setCurrentView(currentUser ? 'calendar' : 'login')}>
-            <Home size={28} /><h1 className="text-xl font-bold">{env.REACT_APP_APP_TITLE}</h1>
+            <Home size={28} /><h1 className="text-xl font-bold">{appTitle}</h1>
         </div>
         <div className="space-x-2 sm:space-x-4 flex items-center">
           {currentUser && (
