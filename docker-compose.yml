@@ -4,3 +4,50 @@ services:
       context: ./frontend # Pfad zum Verzeichnis mit dem Dockerfile
       dockerfile: Dockerfile # Name des Dockerfiles
     container_name: casa_app_frontend
+    depends_on:
+      - backend
+    
+    networks:
+      - npm_default
+    
+    restart: unless-stopped
+    
+  backend:
+    build:
+      context: ./backend # Pfad zum Backend-Verzeichnis
+      dockerfile: Dockerfile
+    container_name: casa_app_backend
+    
+    ports:
+      - "5001:5001" # Host-Port : Container-Port (gemäß Backend server.js)
+    volumes:
+      - ./backend:/usr/src/app # Mountet deinen lokalen Backend-Code in den Container
+      - /usr/src/app/node_modules # Verhindert, dass lokale node_modules die im Container überschreiben
+    networks:
+      - npm_default
+    depends_on:
+      - mariadb # Stellt sicher, dass MariaDB vor dem Backend startet
+    
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:latest # Du kannst hier auch eine spezifische Version angeben, z.B. mariadb:10.11
+    container_name: rdc_hetzner_db
+    
+    environment:
+      MARIADB_ROOT_PASSWORD: Mppm7FsEm9aEZU8pqGKN5Q74 # Ändere dies unbedingt!
+      # Optional: Erstelle eine Datenbank und einen Benutzer beim Start
+      MARIADB_DATABASE: casa_booking_db
+      MARIADB_USER: casa_booking_admin
+      MARIADB_PASSWORD: 25398HkvjJjhvjBVBE67
+    volumes:
+      - /home/me/docker/rdc_hetzner_db/data:/var/lib/mysql # Persistenter Speicher für die Datenbankdaten
+    ports:
+      - "3366:3306" # Mappt den Host-Port 3306 auf den Container-Port 3306
+    networks:
+      - npm_default
+
+    restart: unless-stopped
+networks: # Hier deklarieren wir das externe Netzwerk
+  npm_default:
+    external: true
